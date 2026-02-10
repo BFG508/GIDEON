@@ -104,21 +104,19 @@ function meas = generateSTRMeasurements(STR, N_STR, catalog, DCM_true, omega_bod
             continue;
         end
         
-        % ===== MODIFICACIÓN: Ruido dependiente de magnitud =====
-        % Magnitudes de las estrellas detectadas
+        % Magnitudes of the detected stars
         current_mags = catalog.magnitude(in_fov_idx)';
         
-        % Magnitud de referencia (estrella más tenue detectable)
+        % Reference magnitude (faintest detectable star)
         ref_mag = STR(i_str).magnitude_limit;
         
-        % Factor de escala de ruido: SNR ∝ sqrt(flux) ∝ 10^(-0.2*mag)
-        % Ruido más alto para estrellas tenues, más bajo para brillantes
+        % Noise scaling factor: SNR ∝ sqrt(flux) ∝ 10^(-0.2*mag)
+        % Higher noise for fainter stars, lower for brighter ones
         noise_scale = 10.^(0.2 * (current_mags - ref_mag));
         
-        % Generar ruido Gaussiano con desviación estándar dependiente de magnitud
+        % Generate Gaussian noise with magnitude-dependent standard deviation
         noise_x = STR(i_str).centroid_accuracy * noise_scale .* randn(1, N_visible);
         noise_y = STR(i_str).centroid_accuracy * noise_scale .* randn(1, N_visible);
-        % ===== FIN MODIFICACIÓN =====
         
         pixel_x_noisy = pixel_x + noise_x;
         pixel_y_noisy = pixel_y + noise_y;

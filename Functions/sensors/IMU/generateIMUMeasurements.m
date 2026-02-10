@@ -4,11 +4,11 @@ function imu_meas = generateIMUMeasurements(t, omega_true_b, f_true_b, IMU)
 % accelerometer) from truth data in body frame using a realistic error model.
 %
 % Inputs:
-%   t            - Time vector [s], 1xN
-%   omega_true_b - True angular rate in BODY frame [rad/s], 3xN
-%   f_true_b     - True specific force in BODY frame [m/s^2], 3xN
-%                  (set [] if accelerometer is not used)
-%   IMU          - IMU parameter struct (see mainIMU.m)
+%   t                       - Time vector [s], 1xN
+%   omega_true_b            - True angular rate in BODY frame [rad/s], 3xN
+%   f_true_b                - True specific force in BODY frame [m/s^2], 3xN
+%                             (set [] if accelerometer is not used)
+%   IMU                     - IMU parameter struct (see mainIMU.m)
 %
 % Outputs (struct imu_meas):
 %   imu_meas.gyro_meas_b    - Measured angular rate [rad/s], 3xN
@@ -40,34 +40,27 @@ function imu_meas = generateIMUMeasurements(t, omega_true_b, f_true_b, IMU)
         error('omega_true_b must have size 3xN with N = length(t).');
     end
 
-    use_accel = ~isempty(f_true_b);
-    if use_accel && size(f_true_b,2) ~= N
-        error('f_true_b must have size 3xN with N = length(t).');
-    end
-
     % Pre-allocate outputs
     imu_meas.gyro_meas_b   = zeros(3, N);
     imu_meas.gyro_bias_dyn = zeros(3, N);
-    if use_accel
-        imu_meas.accel_meas_b   = zeros(3, N);
-        imu_meas.accel_bias_dyn = zeros(3, N);
-    end
+    imu_meas.accel_meas_b   = zeros(3, N);
+    imu_meas.accel_bias_dyn = zeros(3, N);
 
     %% ====================================================================
     % 1. GYROSCOPE NOISE & BIAS PARAMETERS (DISCRETE-TIME)
     % =====================================================================
 
-    % 1.1 Angle Random Walk (ARW) -> white noise std in discrete time
+    % 1.1 Angle Random Walk (ARW) -> White noise std in discrete time
     % ARW is given in [deg/sqrt(h)] in IMU.gyro.ARW.
-    ARW_deg_sqrt_hr   = IMU.gyro.ARW;
-    ARW_rad_sqrt_s    = deg2rad(ARW_deg_sqrt_hr) / sqrt(3600);  % [rad/sqrt(s)]
-    sigma_gyro_white  = ARW_rad_sqrt_s / sqrt(dt);              % [rad/s] per sample
+    ARW_deg_sqrt_hr    = IMU.gyro.ARW;
+    ARW_rad_sqrt_s     = deg2rad(ARW_deg_sqrt_hr) / sqrt(3600);             % [rad/sqrt(s)]
+    sigma_gyro_white   = ARW_rad_sqrt_s / sqrt(dt);                         % [rad/s] per sample
 
-    % 1.2 Rate Random Walk (RRW) -> bias random walk step
+    % 1.2 Rate Random Walk (RRW) -> Bias random walk step
     % RRW given approx in [deg/h/sqrt(h)].
     RRW_deg_hr_sqrt_hr = IMU.gyro.RRW;
     RRW_rad_s_sqrt_s   = deg2rad(RRW_deg_hr_sqrt_hr) / (3600 * sqrt(3600)); % [rad/s^2/sqrt(s)]
-    sigma_bias_step     = RRW_rad_s_sqrt_s * sqrt(dt);                       % [rad/s] per step
+    sigma_bias_step    = RRW_rad_s_sqrt_s * sqrt(dt);                       % [rad/s] per step
 
     % Initial dynamic bias (start at zero; static bias is IMU.gyro.biasStatic)
     bias_dyn_k = zeros(3,1);
@@ -75,22 +68,19 @@ function imu_meas = generateIMUMeasurements(t, omega_true_b, f_true_b, IMU)
     %% ====================================================================
     % 2. ACCELEROMETER NOISE & BIAS PARAMETERS (DISCRETE-TIME)
     % =====================================================================
-    if use_accel
-        g0 = 9.80665; % [m/s^2]
+    g0 = 9.80665; % [m/s^2]
 
-        % 2.1 Velocity Random Walk (VRW) in [micro-g/sqrt(Hz)]
-        VRW_ug_sqrt_Hz    = IMU.accel.VRW;
-        VRW_mps2_sqrt_Hz  = (VRW_ug_sqrt_Hz * 1e-6) * g0;       % [m/s^2/sqrt(Hz)]
-        sigma_accel_white = VRW_mps2_sqrt_Hz / sqrt(dt);        % [m/s^2] per sample
+    % 2.1 Velocity Random Walk (VRW) in [micro-g/sqrt(Hz)]
+    VRW_ug_sqrt_Hz    = IMU.accel.VRW;
+    VRW_mps2_sqrt_Hz  = (VRW_ug_sqrt_Hz * 1e-6) * g0;       % [m/s^2/sqrt(Hz)]
+    sigma_accel_white = VRW_mps2_sqrt_Hz / sqrt(dt);        % [m/s^2] per sample
 
-        % 2.2 Bias Instability for accel in [micro-g]
-        BI_ug   = IMU.accel.biasInstability;
-        BI_mps2 = (BI_ug * 1e-6) * g0;                          % [m/s^2]
-        % Heuristic random-walk step (engineering approximation)
-        sigma_accel_bias_step = (BI_mps2 / 100) * sqrt(dt);     % [m/s^2] per step
+    % 2.2 Acceleration Random Walk (ARW for bias drift) in [m/s/sqrt(h)]
+    ARW_accel_ms_sqrt_hr = IMU.accel.ARW;
+    ARW_accel_ms2_sqrt_s = ARW_accel_ms_sqrt_hr / sqrt(3600); % [m/s^2/sqrt(s)]
+    sigma_accel_bias_step = ARW_accel_ms2_sqrt_s * sqrt(dt);  % [m/s^2] per step
 
-        bias_accel_dyn_k = zeros(3,1);
-    end
+    bias_accel_dyn_k = zeros(3,1);
 
     %% ====================================================================
     % 3. MAIN LOOP: APPLY ERROR MODEL SAMPLE BY SAMPLE
@@ -126,31 +116,28 @@ function imu_meas = generateIMUMeasurements(t, omega_true_b, f_true_b, IMU)
         imu_meas.gyro_meas_b(:,k) = omega_sensor_true + bias_total_k + noise_gyro_k;
 
         %------------------------------------------------------------------
-        % 3.5 ACCELEROMETER MODEL (if provided)
+        % 3.5 ACCELEROMETER MODEL
         %------------------------------------------------------------------
-        if use_accel
-            % Deterministic transform for accelerometer triad
-            % (We reuse gyro.T_Deterministic; in a refined model use IMU.accel.T_Deterministic)
-            f_sensor_true = IMU.gyro.T_Deterministic * f_true_b(:,k);
+        % Deterministic transform for accelerometer triad
+        f_sensor_true = IMU.accel.T_Deterministic * f_true_b(:,k);
 
-            % Dynamic bias random walk
-            bias_accel_dyn_k = bias_accel_dyn_k + sigma_accel_bias_step * randn(3,1);
-            imu_meas.accel_bias_dyn(:,k) = bias_accel_dyn_k;
+        % Dynamic bias random walk
+        bias_accel_dyn_k = bias_accel_dyn_k + sigma_accel_bias_step * randn(3,1);
+        imu_meas.accel_bias_dyn(:,k) = bias_accel_dyn_k;
 
-            % Static accel bias (turn-on), modeled similar to gyro
-            if ~isfield(IMU.accel, 'biasStatic')
-                % Convert [mg] to [m/s^2]
-                b_lim = IMU.accel.biasStaticLimit * 1e-3 * g0;  % [mg] -> [m/s^2]
-                IMU.accel.biasStatic = b_lim * randn(3,1);
-            end
-
-            bias_accel_total_k = IMU.accel.biasStatic + bias_accel_dyn_k;
-
-            % White noise
-            noise_accel_k = sigma_accel_white * randn(3,1);
-
-            % Final accel measurement
-            imu_meas.accel_meas_b(:,k) = f_sensor_true + bias_accel_total_k + noise_accel_k;
+        % Static accel bias (turn-on), modeled similar to gyro
+        if ~isfield(IMU.accel, 'biasStatic')
+            % Convert [mg] to [m/s^2]
+            b_lim = IMU.accel.biasStaticLimit * 1e-3 * g0;  % [mg] -> [m/s^2]
+            IMU.accel.biasStatic = b_lim * randn(3,1);
         end
+
+        bias_accel_total_k = IMU.accel.biasStatic + bias_accel_dyn_k;
+
+        % White noise
+        noise_accel_k = sigma_accel_white * randn(3,1);
+
+        % Final accel measurement
+        imu_meas.accel_meas_b(:,k) = f_sensor_true + bias_accel_total_k + noise_accel_k;
     end
 end

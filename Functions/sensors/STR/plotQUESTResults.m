@@ -41,7 +41,7 @@ function fig_handles = plotQUESTResults(meas, N_STR, STR, DCM_true, DCM_estimate
     
     % Create Figures directory if saving is requested
     if saveFlag
-        figures_dir = [pwd, '\Figures'];
+        figures_dir = fullfile(pwd, 'Figures', 'STR', 'QUEST');
         if ~exist(figures_dir, 'dir')
             mkdir(figures_dir);
             fprintf('\n✓ Created directory: %s/\n', figures_dir);
