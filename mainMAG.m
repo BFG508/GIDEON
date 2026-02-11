@@ -28,401 +28,245 @@
 %     noise       = Wideband Gaussian noise
 %
 %==========================================================================
+
 clear;
 close all;
 clc;
 
 %% ========================================================================
-% 1. MAG HARDWARE PARAMETERS (Typical Space-Grade Fluxgate)
+% 1. MAG HARDWARE PARAMETERS (Representative Space-Grade Fluxgate/AMR)
 % =========================================================================
-% Representative of sensors like Billingsley TFM100S, ZARM FGM, or NewSpace.
 
 % --- General Configuration ---
-MAG.rate = 10;       % Sampling frequency [Hz] (Typical AOCS: 10-50 Hz)
-MAG.dt   = 1/MAG.rate;
+MAG.rate = 10;                         % Sampling frequency [Hz]
+MAG.dt   = 1 / MAG.rate;       
 
-% Dynamic Range & Resolution
-% Earth field varies approx 25,000 to 65,000 nT (LEO).
-MAG.range      = 100000; % [nT] Dynamic range (+/-)
-MAG.resolution = 0.5;    % [nT] Digital resolution (e.g. 18-bit ADC over range)
+% Dynamic Range & Resolution       
+MAG.range      = 100000;               % [nT] +/- full scale
+MAG.resolution = 0.5;                  % [nT] ADC1ae4ffw quantization step
 
-% Mounting Misalignment (Mechanical)
-% Error aligning the magnetometer bracket to the spacecraft Body frame.
-MAG.mountingError = [0.2; 0.2; 0.5]; % [deg] Roll, Pitch, Yaw
+% Mounting Misalignment: Error aligning the IMU case to the Body frame.
+MAG.mountingError = [0.2; 0.2; 0.5];   % [deg] roll, pitch, yaw
 
-% --- 1. Stochastic Noise Parameters ---
-% Wideband Noise (White Noise Density)
-% Typical Fluxgate: < 20 pT/sqrt(Hz). AMR/Commercial: ~1-10 nT/sqrt(Hz).
-% We choose a conservative AOCS value:
-MAG.noiseDensity = 0.1;  % [nT/sqrt(Hz)] Spectral density
-MAG.sigma_white  = MAG.noiseDensity * sqrt(MAG.rate/2); % [nT] RMS (approx BW = rate/2)
+% --- Stochastic Noise Parameters ---
+MAG.noiseDensity = 0.1;                % [nT/sqrt(Hz)] white noise spectral density
 
-% Bias Stability (Random Walk / Flicker)
-% Drift over temperature and time.
-MAG.biasInstability = 5.0; % [nT] 1-sigma over orbital period
+% Anti-alias / measurement bandwidth model for noise integration
+MAG.antiAlias.type = "onePole";        % "idealNyquist" | "onePole"
+MAG.antiAlias.fc   = 0.25 * MAG.rate;  % [Hz] 1-pole cutoff used for ENBW (if onePole)
 
-% --- 2. Deterministic Errors (Hard Iron / Bias) ---
-% "Hard Iron" is the combination of sensor zero-offset and the spacecraft's
-% own static magnetic remanence. This is usually the largest error source.
-MAG.hardIronLimit = 500.0; % [nT] Max expected offset (uncalibrated)
+% Bias drift as bounded 1st-order Gauss-Markov process
+MAG.biasInstability = 5.0;             % [nT] steady-state 1-sigma (per axis)
+MAG.biasTau         = 3600;            % [s] correlation time (time constant)
 
-% --- 3. Scale Factor & Soft Iron Errors ---
-% "Soft Iron" distorts the field shape (ellipsoid effect).
-% Modeled as Scale Factor error + Off-diagonal coupling.
-MAG.ScaleFactorErr = 1000; % [ppm] (0.1% linearity error)
+% --- Deterministic Errors ---
+MAG.hardIronLimit = 500.0;             % [nT] static hard-iron magnitude limit (per axis, uniform)
+MAG.SF = 1000;                         % [ppm] diagonal scale errors (1-sigma)
+MAG.softIronCoupling = 500;            % [ppm] off-diagonal symmetric coupling (1-sigma)
+MAG.nonOrthogonality  = 0.1;           % [deg] small non-orth angles (1-sigma)
 
-% --- 4. Geometric Errors (Non-Orthogonality) ---
-% Intrinsic sensor axis misalignment (deviation from 90 deg).
-MAG.nonOrthogonality = 0.1; % [deg] (1-sigma)
 
-% --- Derived Matrices & Pre-Allocation ---
+% --- Derived / Initialization ---
 fprintf('\n=== Initializing Magnetometer Model ===\n');
 
-    % 1. Construct Mounting Misalignment Matrix (DCM Body -> Case)
-    roll_err  = deg2rad(MAG.mountingError(1));
-    pitch_err = deg2rad(MAG.mountingError(2));
-    yaw_err   = deg2rad(MAG.mountingError(3));
-    MAG.DCM_mounting = angle2dcm(yaw_err, pitch_err, roll_err, 'ZYX');
+% 1) Mounting misalignment (Body -> Sensor) true DCM
+roll_err  = deg2rad(MAG.mountingError(1));
+pitch_err = deg2rad(MAG.mountingError(2));
+yaw_err   = deg2rad(MAG.mountingError(3));
+MAG.DCM_B2S_true = angle2dcm(yaw_err, pitch_err, roll_err, 'ZYX');
 
-    % 2. Construct Soft Iron / Scale Factor Matrix (Diagonal + Symm)
-    % S = I + diag(sf_err)
-    sf_err = (MAG.ScaleFactorErr * 1e-6) * randn(3,1);
-    MAG.M_SoftIron = eye(3) + diag(sf_err);
-    
-    fprintf(' Scale Factor Errors: [%.1f, %.1f, %.1f] ppm\n', ...
-            sf_err(1)*1e6, sf_err(2)*1e6, sf_err(3)*1e6);
+% 2) Soft iron / scale factor (symmetric matrix near identity)
+SF_err = (MAG.SF * 1e-6) .* randn(3,1);
+C_ppm  = (MAG.softIronCoupling * 1e-6) .* randn(3,1); % xy, xz, yz couplings
+MAG.M_SoftIron = eye(3) + [ SF_err(1),  C_ppm(1),  C_ppm(2);
+                             C_ppm(1), SF_err(2),  C_ppm(3);
+                             C_ppm(2),  C_ppm(3), SF_err(3)];
+ 
+fprintf(' Soft-Iron / Scale-Factor Matrix: [%+.6f  %+.6f  %+.6f]\n', MAG.M_SoftIron(1,1), MAG.M_SoftIron(1,2), MAG.M_SoftIron(1,3));
+fprintf('                                  [%+.6f  %+.6f  %+.6f]\n', MAG.M_SoftIron(2,1), MAG.M_SoftIron(2,2), MAG.M_SoftIron(2,3));
+fprintf('                                  [%+.6f  %+.6f  %+.6f]\n', MAG.M_SoftIron(3,1), MAG.M_SoftIron(3,2), MAG.M_SoftIron(3,3));
 
-    % 3. Construct Non-Orthogonality Matrix (Upper Triangular)
-    % Corrects the sensor frame to be orthogonal
-    no_err = deg2rad(MAG.nonOrthogonality) * randn(3,1);
-    MAG.M_NonOrth = [1, -no_err(3),  no_err(2);
-                     0,          1, -no_err(1);
-                     0,          0,         1];
+% 3) Non-orthogonality (small-angle upper triangular correction)
+nonorth_err = deg2rad(MAG.nonOrthogonality) .* randn(3,1);
+MAG.M_NonOrth = [              1, -nonorth_err(3),  nonorth_err(2);
+                 -nonorth_err(3),               1, -nonorth_err(1);
+                  nonorth_err(2), -nonorth_err(1),               1];
 
-    % 4. Total Deterministic Transform (Body True -> Sensor Meas)
-    % T_mag = M_SoftIron * M_NonOrth * DCM_Mounting
-    MAG.T_Deterministic = MAG.M_SoftIron * MAG.M_NonOrth * MAG.DCM_mounting;
+% Deterministic sensor matrix acting in Sensor axes (after mounting)
+MAG.M_Deterministic = MAG.M_SoftIron * MAG.M_NonOrth;
 
-    % 5. Generate Static Hard Iron Bias (Constant for this run)
-    MAG.biasHardIron = MAG.hardIronLimit * (2*rand(3,1) - 1); % Uniform +/- limit
-    
-    fprintf(' Hard Iron Bias:      [%.2f, %.2f, %.2f] nT\n', ...
-            MAG.biasHardIron(1), MAG.biasHardIron(2), MAG.biasHardIron(3));
-    fprintf(' Noise RMS (White):   %.3f nT\n', MAG.sigma_white);
+% 4) Static hard-iron bias (Sensor axes)
+MAG.biasHardIron = MAG.hardIronLimit * (2*rand(3,1) - 1);
+
+fprintf(' Hard Iron Bias (S):              [%.2f, %.2f, %.2f] nT\n', MAG.biasHardIron(1), MAG.biasHardIron(2), MAG.biasHardIron(3));
+
+% 5) White noise RMS per sample from density and assumed bandwidth
+if string(MAG.antiAlias.type) == "idealNyquist"
+    BW = MAG.antiAlias.fc/2;
+elseif string(MAG.antiAlias.type) == "onePole"
+    BW = 1.57 * MAG.antiAlias.fc; % ENBW for 1-pole low-pass.
+else
+    BW = MAG.antiAlias.fc/2;
+end
+MAG.sigmaWhite = MAG.noiseDensity * sqrt(BW);
+
+fprintf(' White Noise RMS:                 %.4f nT (per axis)\n', MAG.sigmaWhite);
 
 fprintf('=== MAG Initialization Complete ===\n');
 
 %% ========================================================================
 % 2. SIMULATION SETTINGS & GROUND TRUTH GENERATION
 % =========================================================================
-% This section generates the magnetic field "truth" in BODY frame:
-%   1) Define time vector and orbital parameters
-%   2) Propagate orbit (ECI) and convert to Geodetic coordinates (LLA)
-%   3) Compute Earth's magnetic field using IGRF-13/14 (if available)
-%      via MATLAB's 'igrfmagm' function (Aerospace Toolbox).
-%   4) Rotate B-field: NED (IGRF output) -> ECEF -> ECI -> BODY
-%
-% Notes:
-%   - 'igrfmagm' returns B-field in local NED frame [North, East, Down].
-%   - Fallback to Dipole model provided if Aerospace Toolbox is missing.
-% =========================================================================
 
-fprintf('\n=== Generating MAG Ground Truth ===\n');
-
-% -------------------------------------------------------------------------
-% 2.1 Simulation time settings
-% -------------------------------------------------------------------------
-T_total = 60*20;               % Total simulation time [s] (20 minutes)
-t = 0:MAG.dt:T_total;          % Time vector [s]
+% --- Simulation time settings ---
+startEpoch = datetime(2026,2,10,12,0,0,'TimeZone','UTC');
+T_total = 60*20;      % Total simulation time [s]
+t = 0:MAG.dt:T_total; % Time vector [s]
 N = numel(t);
 
-fprintf(' Simulation time: %.1f s (%d samples @ %.1f Hz)\n', T_total, N, MAG.rate);
+fprintf('\n=== Generating Truth Trajectory ===\n');
+fprintf(' Simulation time: %.1f s (%d samples)\n', T_total, N);
 
-% -------------------------------------------------------------------------
-% 2.2 Simple circular orbit model (ECI position)
-% -------------------------------------------------------------------------
-mu_E = 3.986004418e14;         % Earth's gravitational parameter [m^3/s^2]
-R_E  = 6378137.0;              % Earth mean equatorial radius [m]
-w_E  = 7.2921150e-5;           % Earth rotation rate [rad/s]
+% --- Simple circular orbit model (ECI position) ---
 
-orb.altitude_m      = 500e3;   % [m] Typical LEO altitude
-orb.inclination_deg = 97.0;    % [deg] Sun-Synchronous-like
-orb.RAAN_deg        = 40.0;    % [deg]
-orb.argp_deg        = 0.0;     % [deg]
-orb.nu0_deg         = 0.0;     % [deg] Initial true anomaly
+fprintf(' Propagating orbit (J2 + Drag + SRP) ... \n');
 
-a = R_E + orb.altitude_m;      % Semi-major axis [m]
-n = sqrt(mu_E / a^3);          % Mean motion [rad/s]
+% Spacecraft Parameters
+scParams.Mass      = 100.0; % [kg]
+scParams.Area_drag = 1.0;   % [m^2]
+scParams.Area_srp  = 1.2;   % [m^2] (Usually larger due to panels)
+scParams.Cd        = 2.2;   % [-] Drag Coeff
+scParams.Cr        = 1.5;   % [-] Radiation Pressure Coeff (1=Absorb, 2=Reflect)
 
-% Perifocal position: r_pf = a*[cos(nu); sin(nu); 0]
-nu = deg2rad(orb.nu0_deg) + n*t;
-r_pf = [a*cos(nu); a*sin(nu); zeros(1,N)];
+% Orbital Elements
+orbElements.sma      = 6378e3 + 500e3; 
+orbElements.ecc      = 0.001;
+orbElements.inc_deg  = 97.0;
+orbElements.raan_deg = 40.0;
+orbElements.argp_deg = 0.0;
+orbElements.nu_deg   = 0.0;
+orbElements.epoch    = startEpoch;
 
-% Perifocal -> ECI rotation
-RAAN = deg2rad(orb.RAAN_deg);
-inc  = deg2rad(orb.inclination_deg);
-argp = deg2rad(orb.argp_deg);
+[r_ECI, v_ECI_unused] = simulateOrbit(t, orbElements, scParams);
 
-R3_RAAN = [ cos(RAAN) sin(RAAN) 0; -sin(RAAN) cos(RAAN) 0; 0 0 1];
-R1_inc  = [ 1 0 0; 0 cos(inc) sin(inc); 0 -sin(inc) cos(inc)];
-R3_argp = [ cos(argp) sin(argp) 0; -sin(argp) cos(argp) 0; 0 0 1];
+% --- ECI to ECEF and Geodetic Coordinates (LLA) ---
 
-DCM_P2ECI = (R3_RAAN' * R1_inc' * R3_argp')'; 
-r_ECI = DCM_P2ECI * r_pf;      % [m], 3xN
+% Calculate DCMs for all time steps at once (dcmeci2ecef handles vector time)
+DCM_ECI2ECEF_all = dcmeci2ecef('IAU-2000/2006', startEpoch + seconds(t'));
 
-% -------------------------------------------------------------------------
-% 2.3 ECI -> ECEF and Geodetic Coordinates (LLA)
-% -------------------------------------------------------------------------
-theta = w_E * t; % Greenwich Hour Angle (simplified)
-
-r_ECEF  = zeros(3,N);
-lat_deg = zeros(1,N);
-lon_deg = zeros(1,N);
-alt_m   = zeros(1,N);
-
+% Rotate ECI positions to ECEF
+r_ECEF = zeros(3,N);
 for k = 1:N
-    cth = cos(theta(k)); sth = sin(theta(k));
-    DCM_ECI2ECEF = [ cth sth 0; -sth cth 0; 0 0 1];
-    
-    r_ECEF(:,k) = DCM_ECI2ECEF * r_ECI(:,k);
-    
-    % Spherical approximation for LLA (sufficient for simulation inputs)
-    % For high precision, use 'ecef2lla' if available.
-    rk  = norm(r_ECEF(:,k));
-    lat = asin(r_ECEF(3,k) / rk);
-    lon = atan2(r_ECEF(2,k), r_ECEF(1,k));
-    
-    lat_deg(k) = rad2deg(lat);
-    lon_deg(k) = rad2deg(lon);
-    alt_m(k)   = rk - R_E;
+    % Transpose the 3x3 page for the k-th sample if necessary, 
+    % but dcmeci2ecef output format is 3x3xN.
+    r_ECEF(:,k) = DCM_ECI2ECEF_all(:,:,k) * r_ECI(:,k);
 end
 
-% -------------------------------------------------------------------------
-% 2.4 Magnetic Field Truth (IGRF-13 via 'igrfmagm')
-% -------------------------------------------------------------------------
-B_true_ECI_nT = zeros(3,N);
-decimal_year = 2025.0;
+% Convert ECEF to Geodetic (LLA) using WGS84
+% ecef2lla expects Nx3 inputs [x, y, z] and returns [lat, lon, alt]
+lla = ecef2lla(r_ECEF', 'WGS84'); 
 
-% Check for Aerospace Toolbox function 'igrfmagm'
-if exist('igrfmagm', 'file') == 2
-    fprintf(' using IGRF model (igrfmagm) ... ');
-    
-    % Expand decimal_year to match input vector sizes
-    decimal_year_vec = decimal_year * ones(1, N);
-    
-    % Call igrfmagm (vectorized)
-    % Output XYZ is in North-East-Down (NED) frame in nT
-    [XYZ_NED, ~, ~, ~, ~] = igrfmagm(alt_m, lat_deg, lon_deg, decimal_year_vec);
-    
-    for k = 1:N
-        % Extract NED vector for this sample
-        B_NED = XYZ_NED(k, :)'; % [North; East; Down]
-        
-        % Convert NED -> ECEF
-        % Transformation depends on Latitude (phi) and Longitude (lambda)
-        phi = deg2rad(lat_deg(k));
-        lam = deg2rad(lon_deg(k));
-        
-        cphi = cos(phi); sphi = sin(phi);
-        clam = cos(lam); slam = sin(lam);
-        
-        % Rotation matrix from NED to ECEF (local tangent plane)
-        M_NED2ECEF = [ -sphi*clam, -slam, -cphi*clam;
-                       -sphi*slam,  clam, -cphi*slam;
-                        cphi,       0,    -sphi     ];
-                   
-        B_ECEF = M_NED2ECEF * B_NED;
-        
-        % Convert ECEF -> ECI
-        cth = cos(theta(k)); sth = sin(theta(k));
-        DCM_ECEF2ECI = [ cth -sth 0; sth cth 0; 0 0 1];
-        
-        B_true_ECI_nT(:,k) = DCM_ECEF2ECI * B_ECEF;
-    end
-    fprintf('Done.\n');
-    
-else
-    fprintf(' warning: "igrfmagm" not found. Using Dipole Model fallback.\n');
-    B_equator_nT = 30000;
-    K_dipole = B_equator_nT * R_E^3;
-    m_hat = [0;0;1];
-    
-    for k = 1:N
-        r_vec = r_ECEF(:,k); 
-        r_n = norm(r_vec); 
-        u_r = r_vec/r_n;
-        
-        B_ECEF = (K_dipole/r_n^3) * (3*dot(m_hat, u_r)*u_r - m_hat);
-        
-        cth = cos(theta(k)); sth = sin(theta(k));
-        DCM_ECEF2ECI = [ cth -sth 0; sth cth 0; 0 0 1];
-        B_true_ECI_nT(:,k) = DCM_ECEF2ECI * B_ECEF;
-    end
+lat = lla(:,1)'; % [deg] 1xN
+lon = lla(:,2)'; % [deg] 1xN
+alt = lla(:,3)'; % [m]   1xN
+
+% --- Magnetic Field Truth ---
+
+fprintf(' Using IGRF model ... \n');
+
+B_true_ECI   = zeros(3,N);
+decimal_year = 2025 * ones(1,N);
+
+XYZ_NED                        = igrfmagm(alt, lat, lon, decimal_year, 13);
+[B_ECEF_x, B_ECEF_y, B_ECEF_z] = ned2ecefv(XYZ_NED(:,1), XYZ_NED(:,2), XYZ_NED(:,3), ...
+                                           lat(:), lon(:));
+B_ECEF_all                     = [B_ECEF_x'; B_ECEF_y'; B_ECEF_z'];
+
+DCM_ECEF2ECI_all = permute(DCM_ECI2ECEF_all, [2, 1, 3]);
+for k = 1:N
+    B_true_ECI(:,k) = DCM_ECEF2ECI_all(:,:,k) * B_ECEF_all(:,k);
 end
 
-% -------------------------------------------------------------------------
-% 2.5 Truth Attitude & Body Frame Field
-% -------------------------------------------------------------------------
-% Define attitude profile (slow tumble for sensor excitation)
-angle0 = deg2rad(20);
-axis0  = [1; 1; 1] / sqrt(3);
-q_true = zeros(4,N); 
-q_true(:,1) = [cos(angle0/2); sin(angle0/2)*axis0];
+% --- Truth Attitude & Body Frame Field ---
+angle_true = deg2rad(30);                 % Rotation angle [rad]
+axis_true = [1; 1; 1] / sqrt(3);          % Unit rotation axis
 
-omega_true_b = zeros(3,N);
+q_true      = zeros(4,N);
+q_true(:,1) = [cos(angle_true/2); ...          % Scalar part
+               sin(angle_true/2) * axis_true]; % Vector part
+
+omega_true_b = zeros(3,N); % [rad/s] body rates
 omega_true_b(1,:) = deg2rad(0.15);
 omega_true_b(2,:) = deg2rad(0.10) * sin(2*pi*(1/300)*t);
 omega_true_b(3,:) = deg2rad(0.08) * cos(2*pi*(1/500)*t);
 
-% Propagate attitude
 for k = 2:N
-    wx = omega_true_b(1,k-1); wy = omega_true_b(2,k-1); wz = omega_true_b(3,k-1);
-    Omega = [0 -wx -wy -wz; wx 0 wz -wy; wy -wz 0 wx; wz wy -wx 0];
-    q_true(:,k) = q_true(:,k-1) + 0.5 * Omega * q_true(:,k-1) * MAG.dt;
+    q_dot = 1/2 * skewOmega_custom(omega_true_b(:,k-1)) * q_true(:,k-1);
+    q_true(:,k) = q_true(:,k-1) + q_dot * MAG.dt;
     q_true(:,k) = q_true(:,k) / norm(q_true(:,k));
 end
 
-% Rotate Field to Body Frame
-B_true_B_nT = zeros(3,N);
+B_true = zeros(3,N);
 for k = 1:N
-    DCM_ECI2B = quat2dcm_custom(q_true(:,k)); 
-    B_true_B_nT(:,k) = DCM_ECI2B * B_true_ECI_nT(:,k);
+    DCM_ECI2B = quat2dcm_custom(q_true(:,k));
+    B_true(:,k) = DCM_ECI2B * B_true_ECI(:,k);
 end
 
-fprintf('=== MAG Ground Truth Complete (Mean Field: %.0f nT) ===\n', mean(vecnorm(B_true_B_nT)));
+fprintf('\n=== MAG Ground Truth Complete (Mean ||B||: %.0f nT) ===\n', mean(vecnorm(B_true)));
 
 %% ========================================================================
 % 3. GENERATE SYNTHETIC MAGNETOMETER MEASUREMENTS
 % =========================================================================
+
 fprintf('\n=== Generating Synthetic Magnetometer Measurements ===\n');
 
-mag_meas = generateMAGMeasurements(t, B_true_B_nT, MAG);
-
-fprintf('=== Measurement Generation Complete ===\n');
+mag_meas = generateMAGMeasurements(t, B_true, MAG);
 
 %% ========================================================================
-% 4. VALIDATION AND ERROR ANALYSIS
+% 4. VALIDATION AND ERROR ANALYSIS (CONSISTENT FRAMES)
 % =========================================================================
 fprintf('\n=== MAG Validation and Error Analysis ===\n');
 
-% Measurement error (excluding quantization for analysis)
-B_err_nT = mag_meas.B_clean_nT - B_true_B_nT;  % [nT]
+% Truth in Sensor frame (before deterministic sensor matrix)
+B_true_S = MAG.DCM_B2S_true * B_true;
 
-% RMS error per axis (total corruption before quantization)
-rms_B_nT = sqrt(mean(B_err_nT.^2, 2));         % [nT]
+% Error against "ideal sensor axes truth" (shows total corruption)
+B_err = mag_meas.B_clean - B_true_S;
+rms_B_nT = sqrt(mean(B_err.^2, 2));
 
-fprintf('\n--- Magnetic Field RMS Error ---\n');
-fprintf('  RMS(B_x):  %.2f nT\n', rms_B_nT(1));
-fprintf('  RMS(B_y):  %.2f nT\n', rms_B_nT(2));
-fprintf('  RMS(B_z):  %.2f nT\n', rms_B_nT(3));
-fprintf('  RMS(||B||): %.2f nT\n', sqrt(sum(rms_B_nT.^2)));
+fprintf('\n--- RMS Error vs. Ideal Sensor Truth ---\n');
+fprintf('  RMS(B_sx):  %.2f nT\n', rms_B_nT(1));
+fprintf('  RMS(B_sy):  %.2f nT\n', rms_B_nT(2));
+fprintf('  RMS(B_sz):  %.2f nT\n', rms_B_nT(3));
 
-% Field magnitude error
-B_true_mag = vecnorm(B_true_B_nT, 2, 1);
-B_meas_mag = vecnorm(mag_meas.B_meas_nT, 2, 1);
-mag_error_nT = B_meas_mag - B_true_mag;
+% Separate white noise estimate by subtracting known deterministic and bias terms
+B_det_S = mag_meas.B_det;
+b_total = mag_meas.bias_total;
+w_hat   = mag_meas.B_clean - (B_det_S + b_total); % should be ~white (pre-quantization)
+white_std = std(w_hat, 0, 2);
 
-fprintf('\n--- Magnetic Field Magnitude Error ---\n');
-fprintf('  Mean error:  %.2f nT\n', mean(mag_error_nT));
-fprintf('  Std dev:     %.2f nT\n', std(mag_error_nT));
-fprintf('  Max error:   %.2f nT\n', max(abs(mag_error_nT)));
+fprintf('\n--- Empirical White Noise (Pre-Quant) ---\n');
+fprintf('  Std: [%.3f, %.3f, %.3f] nT\n', white_std(1), white_std(2), white_std(3));
+fprintf('  Spec RMS (theory): %.3f nT\n', MAG.sigmaWhite);
 
-% Angular error (unit vector misalignment)
-% Angle between true and measured field directions
-u_true = B_true_B_nT ./ vecnorm(B_true_B_nT, 2, 1);
-u_meas = mag_meas.B_meas_nT ./ vecnorm(mag_meas.B_meas_nT, 2, 1);
+% Direction error (unit vectors) vs ideal sensor truth
+u_true = B_true_S ./ vecnorm(B_true_S, 2, 1);
+u_meas = mag_meas.B_meas ./ vecnorm(mag_meas.B_meas, 2, 1);
+cang = sum(u_true .* u_meas, 1);
+cang = max(min(cang, 1), -1);
+angular_err_deg = rad2deg(acos(cang));
 
-angular_err_rad = acos(max(min(dot(u_true, u_meas), 1), -1));
-angular_err_deg = rad2deg(angular_err_rad);
-
-fprintf('\n--- Angular Alignment Error (Direction) ---\n');
+fprintf('\n--- Angular Alignment Error (Measured vs Ideal Sensor Truth) ---\n');
 fprintf('  Mean:   %.4f deg\n', mean(angular_err_deg));
 fprintf('  Std:    %.4f deg\n', std(angular_err_deg));
-fprintf('  Max:    %.4f deg  ', max(angular_err_deg));
-
-% Performance assessment for AOCS attitude determination
-% Typical requirement: < 0.5 deg for fine pointing
-if max(angular_err_deg) < 0.1
-    fprintf('✓ Excellent (better than 0.1°)\n');
-elseif max(angular_err_deg) < 0.5
-    fprintf('✓ Good (within 0.5° AOCS spec)\n');
-elseif max(angular_err_deg) < 2.0
-    fprintf('○ Acceptable (coarse AOCS)\n');
-else
-    fprintf('⚠ High error (check calibration)\n');
-end
-
-% Dynamic bias drift statistics
-bias_dyn_nT = mag_meas.bias_hard_dyn;  % [nT]
-mean_bias_dyn = mean(bias_dyn_nT, 2);
-std_bias_dyn  = std(bias_dyn_nT, 0, 2);
-max_bias_dyn  = max(abs(bias_dyn_nT), [], 2);
-
-fprintf('\n--- Dynamic Bias Drift Statistics ---\n');
-fprintf('  Axis    Mean [nT]    Std [nT]     Max [nT]\n');
-fprintf('  ───────────────────────────────────────────\n');
-fprintf('  X       %+8.2f    %7.2f    %7.2f\n', mean_bias_dyn(1), std_bias_dyn(1), max_bias_dyn(1));
-fprintf('  Y       %+8.2f    %7.2f    %7.2f\n', mean_bias_dyn(2), std_bias_dyn(2), max_bias_dyn(2));
-fprintf('  Z       %+8.2f    %7.2f    %7.2f\n', mean_bias_dyn(3), std_bias_dyn(3), max_bias_dyn(3));
-
-% Check consistency with specification
-fprintf('\n--- Performance vs. Specifications ---\n');
-fprintf('  Noise Density Spec:     %.2f nT/√Hz\n', MAG.noiseDensity);
-fprintf('  Bias Instability Spec:  %.1f nT\n', MAG.biasInstability);
-
-% Empirical noise estimation (high-frequency component after detrending)
-B_err_detrended = B_err_nT - mean(B_err_nT, 2); % Remove mean
-empirical_noise_std = std(B_err_detrended, 0, 2);
-
-fprintf('  Empirical Noise (RMS):  [%.2f, %.2f, %.2f] nT\n', ...
-        empirical_noise_std(1), empirical_noise_std(2), empirical_noise_std(3));
-
-% Theoretical white noise RMS from spec
-theoretical_noise_rms = MAG.sigma_white;
-fprintf('  Theoretical Noise:      %.2f nT  ', theoretical_noise_rms);
-
-% Validate consistency
-noise_ratio = mean(empirical_noise_std) / theoretical_noise_rms;
-if abs(noise_ratio - 1.0) < 0.2
-    fprintf('✓ Consistent\n');
-elseif abs(noise_ratio - 1.0) < 0.5
-    fprintf('○ Acceptable\n');
-else
-    fprintf('⚠ Deviation detected (ratio = %.2f)\n', noise_ratio);
-end
-
-% Total error budget breakdown
-total_rms = sqrt(sum(rms_B_nT.^2));
-hard_iron_magnitude = norm(MAG.biasHardIron);
-soft_iron_magnitude = norm(MAG.T_Deterministic - eye(3), 'fro') * mean(B_true_mag);
-noise_magnitude = norm(empirical_noise_std);
-
-fprintf('\n--- Error Budget Breakdown (Approximate) ---\n');
-fprintf('  Hard Iron Bias:     %.1f nT  (%.1f%%)\n', ...
-        hard_iron_magnitude, 100*hard_iron_magnitude/total_rms);
-fprintf('  Soft Iron/Scale:    %.1f nT  (%.1f%%)\n', ...
-        soft_iron_magnitude, 100*soft_iron_magnitude/total_rms);
-fprintf('  White Noise:        %.1f nT  (%.1f%%)\n', ...
-        noise_magnitude, 100*noise_magnitude/total_rms);
-fprintf('  Total RMS:          %.1f nT\n', total_rms);
-
-% Calibration quality indicator
-if hard_iron_magnitude < 50
-    fprintf('\n  Calibration status: ✓ Well-calibrated (Hard Iron < 50 nT)\n');
-elseif hard_iron_magnitude < 200
-    fprintf('\n  Calibration status: ○ Nominal (Hard Iron < 200 nT)\n');
-else
-    fprintf('\n  Calibration status: ⚠ Requires calibration (Hard Iron > 200 nT)\n');
-end
-
-fprintf('\n=== MAG Error Analysis Completed ===\n');
+fprintf('  Max:    %.4f deg\n', max(angular_err_deg));
 
 %% ========================================================================
 % 5. RESULTS VISUALIZATION
 % =========================================================================
-% Generate comprehensive validation plots
 
+% Generate comprehensive validation plots
 saveFlag = 1;
-%plotMAGResults(t, B_true_B_nT, mag_meas, MAG, mag_truth, saveFlag);
+plotMAGResults(t, B_true, mag_meas, MAG, saveFlag);
 
 fprintf('\n=== All tasks completed successfully ===\n');

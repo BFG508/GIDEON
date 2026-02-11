@@ -49,18 +49,6 @@ IMU.mountingError = [0.1; 0.1; 0.1]; % [deg] Roll, Pitch, Yaw mounting error
 
 % --- Gyroscope Parameters (Angular Rate) ---
 % Representative of a high-end MEMS or low-end FOG
-%% ========================================================================
-% 1. IMU HARDWARE PARAMETERS (Typical Space-Grade MEMS/FOG values)
-% =========================================================================
-% --- General Configuration ---
-IMU.rate = 120;      % Sampling frequency [Hz] (Typical: 10-1000 Hz)
-IMU.dt = 1/IMU.rate; % Sampling time step [s]
-
-% Mounting Misalignment: Error aligning the IMU case to the Body frame.
-IMU.mountingError = [0.1; 0.1; 0.1]; % [deg] Roll, Pitch, Yaw mounting error
-
-% --- Gyroscope Parameters (Angular Rate) ---
-% Representative of a high-end MEMS or low-end FOG
     % 1. Stochastic Noise (Random processes)
     % ARW: High-frequency noise (white noise density). Determines short-term precision.
     IMU.gyro.ARW = 0.05;              % Angle Random Walk [deg/sqrt(h)]
@@ -120,9 +108,9 @@ fprintf('\n=== Initializing IMU Model ===\n');
     % Models small deviations of the axes from a perfect 90° triad.
     % Upper triangular approximation for small angles.
     nonortho_err_gyro = deg2rad(IMU.gyro.nonorthogonality) * randn(3,1);
-    IMU.gyro.M_nonorth = [1, -nonortho_err_gyro(3),  nonortho_err_gyro(2);
-                          0,                     1, -nonortho_err_gyro(1);
-                          0,                     0,                    1];
+    IMU.gyro.M_nonorth = [                    1, -nonortho_err_gyro(3),  nonortho_err_gyro(2);
+                          -nonortho_err_gyro(3),                     1, -nonortho_err_gyro(1);
+                           nonortho_err_gyro(2), -nonortho_err_gyro(1),                    1];
     
     % Total deterministic transform (Body True -> Gyro Sensor Frame)
     % T_gyro = M_Scale * M_NonOrth * DCM_Mounting
@@ -146,9 +134,9 @@ fprintf('\n=== Initializing IMU Model ===\n');
     
     % Construct Non-Orthogonality Matrix (independent from gyro)
     nonortho_err_accel = deg2rad(IMU.accel.nonorthogonality) * randn(3,1);
-    IMU.accel.M_nonorth = [1, -nonortho_err_accel(3),  nonortho_err_accel(2);
-                           0,                      1, -nonortho_err_accel(1);
-                           0,                      0,                     1];
+    IMU.accel.M_nonorth = [                     1, -nonortho_err_accel(3),  nonortho_err_accel(2);
+                           -nonortho_err_accel(3),                      1, -nonortho_err_accel(1);
+                            nonortho_err_accel(2), -nonortho_err_accel(1),                     1];
     
     % Total deterministic transform (Body True -> Accel Sensor Frame)
     % Note: DCM_mounting is shared (common mechanical housing)
@@ -169,7 +157,7 @@ fprintf('=== IMU Initialization Complete ===\n');
 % 2. SIMULATION SETTINGS & GROUND TRUTH GENERATION
 % =========================================================================
 
-% Simulation duration
+% Simulation time settings
 T_total = 60*40;      % Total simulation time [s]
 t = 0:IMU.dt:T_total; % Time vector [s]
 N = numel(t);

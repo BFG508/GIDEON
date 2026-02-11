@@ -6,7 +6,7 @@ function fig_handles = plotIMUResults(t, omega_true_b, f_true_b, imu_meas, saveF
 %   t             - Time vector [s], 1xN
 %   omega_true_b  - True angular rate in BODY frame [rad/s], 3xN
 %   f_true_b      - True specific force in BODY frame [m/s^2], 3xN
-%   imu_meas      - Struct with IMU measurements (from generateIMUMeasurements)
+%   imu_meas      - Struct with IMU measurements:
 %                   .gyro_meas_b    [rad/s], 3xN
 %                   .gyro_bias_dyn  [rad/s], 3xN
 %                   .accel_meas_b   [m/s^2], 3xN
@@ -104,7 +104,7 @@ function fig_handles = plotIMUResults(t, omega_true_b, f_true_b, imu_meas, saveF
     grid on;
     xlabel('Time [s]', 'FontSize', 11, 'FontWeight', 'bold');
     ylabel('Dynamic Bias [deg/h]', 'FontSize', 11, 'FontWeight', 'bold');
-    title('Gyro Dynamic Bias Random Walk', ...
+    title('Gyro Dynamic Bias ARW', ...
           'FontSize', 13, 'FontWeight', 'bold');
     legend('Location', 'northoutside', 'Orientation', 'horizontal', ...
            'FontSize', 10);
@@ -175,7 +175,7 @@ function fig_handles = plotIMUResults(t, omega_true_b, f_true_b, imu_meas, saveF
     grid on;
     xlabel('Time [s]', 'FontSize', 11, 'FontWeight', 'bold');
     ylabel('Dynamic Bias [m/s^2]', 'FontSize', 11, 'FontWeight', 'bold');
-    title('Accelerometer Dynamic Bias Random Walk', ...
+    title('Accelerometer Dynamic Bias VRW', ...
           'FontSize', 13, 'FontWeight', 'bold');
     legend('Location', 'northoutside', 'Orientation', 'horizontal', ...
            'FontSize', 10);
