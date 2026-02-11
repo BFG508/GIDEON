@@ -4,14 +4,14 @@
 %
 % DESCRIPTION:
 %   Complete simulation and validation framework for spacecraft attitude
-%   estimation using the TRIAD (TRIaxial Attitude Determination) algorithm
-%   with multiple star tracker (STR) measurements.
+%   estimation using the QUEST (TRIaxial Attitude Determination) algorithm with
+%   multiple star tracker (STR) measurements.
 %
 % PURPOSE:
-%   Demonstrates two-vector attitude determination using real Hipparcos
-%   stellar catalog and realistic noise models (centroiding, motion blur,
-%   mounting misalignment). Validates performance against STR specifications
-%   and theoretical Cramér-Rao Lower Bound (CRLB) for TRIAD geometry.
+%   Demonstrates optimal attitude determination using real Hipparcos stellar
+%   catalog and realistic noise models (centroiding, motion blur, mounting
+%   misalignment). Validates performance against STR specifications and
+%   Cramér-Rao Lower Bound (CRLB).
 %
 % ALGORITHM:
 %   TRIAD solves Wahba's problem using exactly two vector observations by
@@ -28,39 +28,38 @@
 %
 % WORKFLOW:
 %   1. Define STR hardware parameters (FOV, resolution, accuracy)
-%   2. Load Hipparcos stellar catalog (magnitude ≤ 6.5)
+%   2. Load Hipparcos stellar catalog (magnitude ≤ magnitude_limit)
 %   3. Set true spacecraft attitude (ground truth)
-%   4. Simulate noisy STR measurements (up to 2 STRs)
-%   5. Execute TRIAD algorithm (two-vector deterministic method)
+%   4. Simulate noisy STR measurements
+%   5. Execute TRIAD algorithm
 %   6. Validate results: errors, CRLB, performance metrics
 %   7. Generate diagnostic plots (residuals, quaternion, DCM, vector selection)
 %
 % KEY FEATURES:
 %   - Multi-STR configuration (1 or 2 trackers)
-%   - Realistic noise: centroiding (0.15 px), motion blur, misalignment
-%   - Real stellar data: Hipparcos catalog (~9000 stars)
+%   - Realistic noise: centroiding, motion blur, misalignment
+%   - Real stellar data: Hipparcos catalog (~ 9000 stars)
 %   - Comprehensive validation: attitude error, Euler angles, DCM
-%   - TRIAD optimality assessment: weight ratio, angular separation
 %   - Performance analysis: CRLB efficiency, dominant noise sources
 %   - Publication-quality figures (saved as FIG, PNG, SVG)
 %
 % OUTPUTS:
-%   - q_estimated: Optimal attitude quaternion [qw; qx; qy; qz]
-%   - DCM_estimated: Direction Cosine Matrix (3×3)
-%   - Attitude errors: Total, Euler angles, DCM Frobenius norm
+%   - qEst:                Optimal attitude quaternion [qw; qx; qy; qz]
+%   - DCMEst:              Direction Cosine Matrix (3×3)
+%   - Attitude errors:     Total, Euler angles, DCM Frobenius norm
 %   - Performance metrics: CRLB, efficiency, residual statistics
-%   - Diagnostic figures: 6 plots in Figures/ directory
+%   - Diagnostic figures:  5 plots in Figures/ directory
 %
 % CONFIGURATION:
 %   Edit Section 1 for:
-%   - STR hardware specs (FOV, resolution, focal length)
-%   - Mounting misalignment (roll, pitch, yaw errors)
-%   - Number of STRs (N_STR = 1 or 2)
-%   - Noise levels (centroiding accuracy, angular rate)
+%   - STR hardware specs
+%   - Mounting misalignment
+%   - Number of STRs
+%   - Noise levels
 %
 %   Edit Section 3 for:
-%   - True attitude (quaternion or Euler angles)
-%   - Spacecraft angular velocity (omega_body)
+%   - Spacecraft true attitude
+%   - Spacecraft angular velocity
 
 % TRIAD vs. QUEST:
 % TRIAD advantages:
@@ -86,60 +85,49 @@ clc;
 % =========================================================================
 
 % Mounting misalignment errors (typical mechanical tolerances)
-roll_error  =  0.000; % Mounting error around X-axis [deg]
-pitch_error = -0.000; % Mounting error around Y-axis [deg]
-yaw_error   =  0.000; % Mounting error around Z-axis [deg]
+rollErr  =  0.002; % Mounting error around X-axis [deg]
+pitchErr = -0.005; % Mounting error around Y-axis [deg]
+yawErr   =  0.003; % Mounting error around Z-axis [deg]
 
 % Construct misalignment DCM (small perturbation from ideal alignment)
-DCM_misalignment = angle2dcm(deg2rad(yaw_error), ...
-                             deg2rad(pitch_error), ...
-                             deg2rad(roll_error), ...
+DCM_misalignment = angle2dcm(deg2rad(yawErr), ...
+                             deg2rad(pitchErr), ...
+                             deg2rad(rollErr), ...
                              'ZYX');
 
-% Base STR specifications (representative of high-accuracy units)
-STR.FOV_deg                     = 20;           % Field of view               [deg]
-STR.resolution                  = [2048, 2048]; % Sensor resolution           [pixels]
-STR.pixel_size                  = 5.5e-6;       % Pixel pitch                 [m]
-STR.focal_length                = 0.065;        % Optical focal length        [m]
-STR.centroid_accuracy           = 0.15;         % Centroiding precision       [pixels, 1σ]
-STR.magnitude_limit             = 6.5;          % Visual magnitude threshold  [-]
-STR.update_rate                 = 4;            % Measurement frequency       [Hz]
-STR.attitude_accuracy_crossbore = 5;            % Cross-boresight accuracy    [arcsec, 1σ]
-STR.attitude_accuracy_roll      = 20;           % Roll-axis accuracy          [arcsec, 1σ]
-STR.max_angular_rate            = 1.0;          % Maximum trackable rate      [deg/s]
+% Base STR specifications
+STR.FOV                       = 20;           % Field of view              [deg]
+STR.resolution                = [2048, 2048]; % Sensor resolution          [pixels]
+STR.pixelSize                 = 5.5e-6;       % Pixel pitch                [m]
+STR.focalLength               = 0.065;        % Optical focal length       [m]
+STR.centroidAccuracy          = 0.15;         % Centroiding precision      [pixels, 1σ]
+STR.magnitudeLimit            = 6.5;          % Visual magnitude threshold [-]
+STR.rate                      = 4;            % Measurement frequency      [Hz]
+STR.attitudeAccuracyCrossbore = 5;            % Cross-boresight accuracy   [arcsec, 1σ]
+STR.attitudeAccuracyRoll      = 20;           % Roll-axis accuracy         [arcsec, 1σ]
+STR.maxAngularRate            = 1.0;          % Maximum trackable rate     [deg/s]
 
 % Number of star trackers in configuration
-N_STR = 2; % 1 or 2 STRs supported
+nSTR = 2; % 1 or 2 STRs supported
 
 % STR1: Nominal boresight aligned with +Z body axis
-STR(1).DCM_B2S                     = DCM_misalignment;
-STR(1).FOV_deg                     = STR.FOV_deg;
-STR(1).resolution                  = STR.resolution;
-STR(1).pixel_size                  = STR.pixel_size;
-STR(1).focal_length                = STR.focal_length;
-STR(1).centroid_accuracy           = STR.centroid_accuracy;
-STR(1).magnitude_limit             = STR.magnitude_limit;
-STR(1).update_rate                 = STR.update_rate;
-STR(1).attitude_accuracy_crossbore = STR.attitude_accuracy_crossbore;
-STR(1).attitude_accuracy_roll      = STR.attitude_accuracy_roll;
+STR(1).DCM_B2S                   = DCM_misalignment;
+STR(1).FOV                       = STR.FOV;
+STR(1).resolution                = STR.resolution;
+STR(1).pixelSize                 = STR.pixelSize;
+STR(1).focalLength               = STR.focalLength;
+STR(1).centroidAccuracy          = STR.centroidAccuracy;
+STR(1).magnitudeLimit            = STR.magnitudeLimit;
+STR(1).rate                      = STR.rate;
+STR(1).attitudeAccuracyCrossbore = STR.attitudeAccuracyCrossbore;
+STR(1).attitudeAccuracyRoll      = STR.attitudeAccuracyRoll;
 
-% STR2: 90° rotation around Y-axis for lateral coverage (if N_STR = 2)
-if N_STR == 2
+% STR2: 90° rotation around Y-axis for lateral coverage (if nSTR = 2)
+if nSTR == 2
     % Compose misalignment with nominal 90° Y-rotation
-    DCM_nominal_90Y = [ cos(pi/2), 0, sin(pi/2); 
-                                0, 1,         0; 
-                       -sin(pi/2), 0, cos(pi/2)];
-    
-    STR(2).DCM_B2S                     = DCM_misalignment * DCM_nominal_90Y;
-    STR(2).FOV_deg                     = STR.FOV_deg;
-    STR(2).resolution                  = STR.resolution;
-    STR(2).pixel_size                  = STR.pixel_size;
-    STR(2).focal_length                = STR.focal_length;
-    STR(2).centroid_accuracy           = STR.centroid_accuracy;
-    STR(2).magnitude_limit             = STR.magnitude_limit;
-    STR(2).update_rate                 = STR.update_rate;
-    STR(2).attitude_accuracy_crossbore = STR.attitude_accuracy_crossbore;
-    STR(2).attitude_accuracy_roll      = STR.attitude_accuracy_roll;
+    DCM_STR2       = angle2dcm(-pi/2, 0, 0, 'YZX');
+    STR(2)         = STR(1);
+    STR(2).DCM_B2S = DCM_misalignment * DCM_STR2;
 end
 
 %% ========================================================================
@@ -147,118 +135,118 @@ end
 % =========================================================================
 
 % Load real Hipparcos catalog (cached in Data/ folder for speed)
-catalog = loadHipparcosStellarCatalog(STR(1).magnitude_limit);
+catalog = loadHipparcosStellarCatalog(STR(1).magnitudeLimit);
 
 %% ========================================================================
 %  3. DEFINE TRUE ATTITUDE (GROUND TRUTH)
 % =========================================================================
 
 % True attitude quaternion (scalar-first convention: [qs; qv])
-% Rotation: 30° about normalized axis [1,1,1]
-angle_true = deg2rad(30);                 % Rotation angle [rad]
-axis_true = [1; 1; 1] / sqrt(3);          % Unit rotation axis
-q_true = [cos(angle_true/2); ...          % Scalar part
-          sin(angle_true/2) * axis_true]; % Vector part
+angleTrue = rand * 2*pi;                   % Rotation angle [rad]
+ axisTrue = randn(3,1);
+ axisTrue = axisTrue / norm(axisTrue);     % Unit rotation axis
+ 
+    qTrue = [cos(angleTrue/2); ...         % Scalar part
+             sin(angleTrue/2) * axisTrue]; % Vector part
 
 % Convert quaternion to DCM (ECI-to-Body transformation)
-DCM_true = quat2dcm_custom(q_true);
+DCMTrue = quat2dcm(qTrue);
 
 % Satellite angular velocity in body frame [rad/s]
-omega_body = [ 0.000; 
-               0.000; 
-              -0.000];
+omegaBody = randn(3,1) * 1e-5;
 
 %% ========================================================================
 %  4. GENERATE SYNTHETIC STAR TRACKER MEASUREMENTS
 % =========================================================================
 
 % Simulate observations from all configured star trackers
-meas = generateSTRMeasurements(STR, N_STR, catalog, DCM_true, omega_body);
+meas = generateSTRMeasurements(STR, nSTR, catalog, DCMTrue, omegaBody);
 
 %% ========================================================================
 %  5. TRIAD ALGORITHM - ATTITUDE ESTIMATION
 % =========================================================================
 
 % Solve for attitude using TRIAD algorithm
-[q_estimated, DCM_estimated, triad_info] = solveTRIADAttitude(meas, N_STR);
+[qEst, DCMEst, triadInfo] = solveTRIADAttitude(meas, nSTR);
 
 %% ========================================================================
 % 6. VALIDATION AND ERROR ANALYSIS
 % =========================================================================
+
 fprintf('\n=== Attitude Error Analysis ===\n');
 
 % Quaternion Error
-q_error = quatmultiply_custom(q_estimated, quatinv_custom(q_true));
-angle_error_rad = 2 * acos(min(abs(q_error(1)), 1)); % Scalar-first: q(1)
-angle_error_deg = rad2deg(angle_error_rad);
-angle_error_arcsec = angle_error_deg * 3600;
+qErr     = quatmultiply(qEst, quatinv(qTrue));
+angleErr = rad2deg(2 * acos(min(abs(qErr(1)), 1))) * 3600;  % Scalar-first: q(1)
 
 fprintf('\nQuaternion Comparison:\n');
-fprintf(' q_true:      [%.6f, %.6f, %.6f, %.6f]\n', q_true);
-fprintf(' q_estimated: [%.6f, %.6f, %.6f, %.6f]\n', q_estimated);
-fprintf(' q_error:     [%.6f, %.6f, %.6f, %.6f]\n', q_error);
+fprintf('  qTrue: [%.6f, %.6f, %.6f, %.6f]\n', qTrue);
+fprintf('  qEst:  [%.6f, %.6f, %.6f, %.6f]\n', qEst);
+fprintf('  qErr:  [%.6f, %.6f, %.6f, %.6f]\n', qErr);
 
 fprintf('\nTotal Angular Error:\n');
-fprintf(' Magnitude: %.4f deg = %.2f arcsec ', angle_error_deg, angle_error_arcsec);
-if angle_error_arcsec < 5
+fprintf('  Magnitude:   %.4f deg = %.2f arcsec  ', angleErr, angleErr);
+if angleErr < 5
     fprintf('✓ Excellent\n');
-elseif angle_error_arcsec < 20
+elseif angleErr < 20
     fprintf('✓ Good\n');
-elseif angle_error_arcsec < 100
+elseif angleErr < 100
     fprintf('○ Acceptable\n');
 else
     fprintf('⚠ High error\n');
 end
 
 % Euler Angles Error (ZYX: Yaw-Pitch-Roll)
-euler_true = rad2deg(dcm2euler_ZYX(DCM_true));
-euler_estimated = rad2deg(dcm2euler_ZYX(DCM_estimated));
-euler_error = euler_estimated - euler_true;
+eulerTrue = rad2deg(dcm2euler_ZYX(DCMTrue));
+eulerEst  = rad2deg(dcm2euler_ZYX(DCMEst));
+eulerErr  = eulerEst - eulerTrue;
 
 fprintf('\nEuler Angles (ZYX: Yaw-Pitch-Roll):\n');
-fprintf('  Component    True      Estimated   Error      Error\n');
-fprintf('               [deg]       [deg]     [deg]     [arcsec]\n');
-fprintf(' ─────────────────────────────────────────────────────────\n');
-fprintf('  Yaw   (Z)  %7.3f     %7.3f    %+7.4f  %+8.2f\n', ...
-    euler_true(1), euler_estimated(1), euler_error(1), euler_error(1)*3600);
-fprintf('  Pitch (Y)  %7.3f     %7.3f    %+7.4f  %+8.2f\n', ...
-    euler_true(2), euler_estimated(2), euler_error(2), euler_error(2)*3600);
-fprintf('  Roll  (X)  %7.3f     %7.3f    %+7.4f  %+8.2f\n', ...
-    euler_true(3), euler_estimated(3), euler_error(3), euler_error(3)*3600);
+fprintf('  Component    True        Estimated   Error       Error\n');
+fprintf('               [deg]         [deg]     [deg]      [arcsec]\n');
+fprintf('  ─────────────────────────────────────────────────────────\n');
+fprintf('  Yaw   (Z)    %7.3f     %7.3f    %+7.4f   %+8.2f\n', ...
+        eulerTrue(1), eulerEst(1), eulerErr(1), eulerErr(1)*3600);
+fprintf('  Pitch (Y)    %7.3f     %7.3f    %+7.4f   %+8.2f\n', ...
+        eulerTrue(2), eulerEst(2), eulerErr(2), eulerErr(2)*3600);
+fprintf('  Roll  (X)    %7.3f     %7.3f    %+7.4f   %+8.2f\n', ...
+        eulerTrue(3), eulerEst(3), eulerErr(3), eulerErr(3)*3600);
 
-[max_euler_error, max_axis] = max(abs(euler_error));
-axis_names = {'Yaw', 'Pitch', 'Roll'};
-fprintf('\n  Max error: %s axis (%.2f arcsec)\n', ...
-    axis_names{max_axis}, max_euler_error * 3600);
+[maxEulerErr, maxAxis] = max(abs(eulerErr));
+axisNames = {'Yaw', 'Pitch', 'Roll'};
+fprintf('\n  Max Error:   %s Axis (%.2f arcsec)\n', ...
+        axisNames{maxAxis}, maxEulerErr * 3600);
 
 % Comparison with STR Specifications
 fprintf('\n--- Performance vs. STR Specifications ---\n');
 
     % Cross-boresight accuracy (affects Yaw/Pitch)
-    crossbore_spec_3sigma = 3 * STR(1).attitude_accuracy_crossbore;
-    crossbore_error = sqrt(euler_error(1)^2 + euler_error(2)^2) * 3600;
+    crossboreSpec_3sigma = 3 * STR(1).attitudeAccuracyCrossbore;
+    crossboreERR         = sqrt(eulerErr(1)^2 + eulerErr(2)^2) * 3600;
+    
     fprintf('  Cross-boresight:\n');
-    fprintf('    Spec (1σ):      %6.1f arcsec\n', STR(1).attitude_accuracy_crossbore);
-    fprintf('    Spec (3σ):      %6.1f arcsec\n', crossbore_spec_3sigma);
-    fprintf('    Measured error: %6.2f arcsec ', crossbore_error);
-    if crossbore_error < STR(1).attitude_accuracy_crossbore
+    fprintf('    Spec (1σ):       %6.1f arcsec\n', STR(1).attitudeAccuracyCrossbore);
+    fprintf('    Spec (3σ):       %6.1f arcsec\n', crossboreSpec_3sigma);
+    fprintf('    Measured error:  %6.2f arcsec  ', crossboreERR);
+    if crossboreERR < STR(1).attitudeAccuracyCrossbore
         fprintf('✓ Better than 1σ\n');
-    elseif crossbore_error < crossbore_spec_3sigma
+    elseif crossboreERR < crossboreSpec_3sigma
         fprintf('✓ Within 3σ\n');
     else
         fprintf('⚠ Exceeds 3σ spec\n');
     end
     
     % Roll accuracy (affects Roll axis)
-    roll_spec_3sigma = 3 * STR(1).attitude_accuracy_roll;
-    roll_error = abs(euler_error(3)) * 3600;
+    rollSpec_3sigma = 3 * STR(1).attitudeAccuracyRoll;
+    rollErr         = abs(eulerErr(3)) * 3600;
+    
     fprintf('  Roll-axis:\n');
-    fprintf('    Spec (1σ):      %6.1f arcsec\n', STR(1).attitude_accuracy_roll);
-    fprintf('    Spec (3σ):      %6.1f arcsec\n', roll_spec_3sigma);
-    fprintf('    Measured error: %6.2f arcsec ', roll_error);
-    if roll_error < STR(1).attitude_accuracy_roll
+    fprintf('    Spec (1σ):       %6.1f arcsec\n', STR(1).attitudeAccuracyRoll);
+    fprintf('    Spec (3σ):       %6.1f arcsec\n', rollSpec_3sigma);
+    fprintf('    Measured error:  %6.2f arcsec  ', rollErr);
+    if rollErr < STR(1).attitudeAccuracyRoll
         fprintf('✓ Better than 1σ\n');
-    elseif roll_error < roll_spec_3sigma
+    elseif rollErr < rollSpec_3sigma
         fprintf('✓ Within 3σ\n');
     else
         fprintf('⚠ Exceeds 3σ spec\n');
@@ -266,111 +254,134 @@ fprintf('\n--- Performance vs. STR Specifications ---\n');
     
     % Overall attitude error vs. cross-boresight spec
     fprintf('  Overall attitude:\n');
-    fprintf('    Measured error: %6.2f arcsec ', angle_error_arcsec);
-    if angle_error_arcsec < STR(1).attitude_accuracy_crossbore
+    fprintf('    Measured error:  %6.2f arcsec  ', angleErr);
+    if angleErr < STR(1).attitudeAccuracyCrossbore
         fprintf('✓ Better than 1σ spec\n');
-    elseif angle_error_arcsec < crossbore_spec_3sigma
+    elseif angleErr < crossboreSpec_3sigma
         fprintf('✓ Within 3σ spec\n');
     else
         fprintf('⚠ Exceeds 3σ spec\n');
     end
     
-    % Cramér-Rao Lower Bound (Theoretical Best Performance for TRIAD)
-    fprintf('\n--- Theoretical Performance Limits (CRLB for TRIAD) ---\n');
-    
+% Cramér-Rao Lower Bound (Theoretical Best Performance)
+fprintf('\n--- Theoretical Performance Limits (CRLB) ---\n');
     % Single-axis pointing precision from centroiding
-    sigma_centroid_rad = STR(1).centroid_accuracy * STR(1).pixel_size / STR(1).focal_length;
-    sigma_centroid_arcsec = rad2deg(sigma_centroid_rad) * 3600;
-    fprintf('  Centroiding noise: %.3f pixels (1σ)\n', STR(1).centroid_accuracy);
-    fprintf('  Single-star CRLB:  %.2f arcsec\n', sigma_centroid_arcsec);
-
-% TRIAD uses exactly 2 vectors (primary and secondary)
-% Theoretical accuracy depends on vector weights and separation angle
-N_vectors_used = 2;
-weight_ratio = triad_info.vector1_weight / triad_info.vector2_weight;
-angle_sep_rad = deg2rad(triad_info.angle_between_vectors);
-
-% TRIAD CRLB approximation (from Shuster 2007):
-% σ_TRIAD² ≈ (σ₁² + σ₂²·sin²θ) / sin²θ
-% where θ is angle between vectors, σ₁ and σ₂ are measurement uncertainties
-% Simplified: σ_TRIAD ≈ σ_centroid / (sin(θ) * sqrt(2))
-sigma_triad_factor = 1 / (sin(angle_sep_rad) * sqrt(2));
-sigma_triad_arcsec = sigma_centroid_arcsec * sigma_triad_factor;
-
-fprintf('  TRIAD CRLB:        %.2f arcsec (2 vectors, θ = %.1f°)\n', ...
-    sigma_triad_arcsec, triad_info.angle_between_vectors);
-fprintf('  Primary weight:    %.4f (most accurate vector)\n', triad_info.vector1_weight);
-fprintf('  Secondary weight:  %.4f (ratio = %.2f:1)\n', ...
-    triad_info.vector2_weight, weight_ratio);
-
-% Check if actual error is close to theoretical limit
-efficiency = sigma_triad_arcsec / angle_error_arcsec * 100;
-fprintf('  Actual error:      %.2f arcsec\n', angle_error_arcsec);
-fprintf('  Efficiency:        %.1f%% ', efficiency);
-if efficiency > 80
-    fprintf('✓ Near-optimal\n');
-elseif efficiency > 50
-    fprintf('○ Good\n');
-else
-    fprintf('⚠ Suboptimal (noise sources present)\n');
-end
-
-% TRIAD optimality assessment
-fprintf('\n--- TRIAD Optimality Assessment ---\n');
-if weight_ratio > 3.0
-    fprintf('  Weight distribution: ✓ TRIAD optimal (σ₁ << σ₂, ratio %.1f:1)\n', weight_ratio);
-    fprintf('  Primary vector dominates accuracy as expected.\n');
-elseif weight_ratio > 1.5
-    fprintf('  Weight distribution: ○ TRIAD acceptable (moderate ratio %.1f:1)\n', weight_ratio);
-    fprintf('  QUEST may provide similar or slightly better accuracy.\n');
-else
-    fprintf('  Weight distribution: ⚠ Vectors have similar weights (%.1f:1)\n', weight_ratio);
-    fprintf('  QUEST recommended: Better utilizes all %d observations.\n', triad_info.N_obs);
-end
-
-if triad_info.angle_between_vectors > 30 && triad_info.angle_between_vectors < 150
-    fprintf('  Vector separation:   ✓ Good conditioning (%.1f°)\n', triad_info.angle_between_vectors);
-elseif triad_info.angle_between_vectors > 15 && triad_info.angle_between_vectors < 165
-    fprintf('  Vector separation:   ○ Acceptable (%.1f°)\n', triad_info.angle_between_vectors);
-else
-    fprintf('  Vector separation:   ⚠ Poor conditioning (%.1f°, near-collinear)\n', ...
-        triad_info.angle_between_vectors);
-end
-
-if triad_info.N_obs > 2
-    fprintf('  Additional stars:    %d observations not used by TRIAD\n', ...
-        triad_info.N_obs - 2);
-    fprintf('  Consider QUEST to utilize all available measurements.\n');
-end
-
-% Identify dominant noise source
-if angle_error_arcsec < 2 * sigma_triad_arcsec
-    dominant_noise = 'Centroid noise (measurement-limited)';
-elseif triad_info.residual_mean > 100
-    dominant_noise = 'Motion blur (dynamics-limited)';
-elseif triad_info.residual_std / triad_info.residual_mean > 0.8
-    dominant_noise = 'Outliers or inconsistent measurements';
-else
-    dominant_noise = 'Mixed noise sources';
-end
-fprintf('  Dominant source:     %s\n', dominant_noise);
+    sigmaCentroid = rad2deg(  STR(1).centroidAccuracy * STR(1).pixelSize ... 
+                            / STR(1).focalLength) * 3600;
+    
+    fprintf('  Centroiding noise:   %.3f pixels (1σ)\n', STR(1).centroidAccuracy);
+    fprintf('  Single-star CRLB:    %.2f arcsec\n'     , sigmaCentroid);
+    
+    % Multi-star improvement: σ_combined ≈ σ_single / sqrt(N)
+    nEffective = triadInfo.nObs;
+    sigmaCRLB  = sigmaCentroid / sqrt(nEffective);
+    
+    fprintf('  Multi-star CRLB:     %.2f arcsec (N = %d stars)\n', ...
+            sigmaCRLB, nEffective);
+    
+    % Compare actual error with theoretical limit
+    fprintf('  Measured error:      %.2f arcsec\n', angleErr);
+    fprintf('  Ratio (error/CRLB):  %.2fx  '      , angleErr / sigmaCRLB);
+    if angleErr < 2 * sigmaCRLB
+        fprintf('✓ Within 2σ of CRLB\n');
+    elseif angleErr < 3 * sigmaCRLB
+        fprintf('○ Within 3σ of CRLB\n');
+    else
+        fprintf('⚠ Exceeds 3σ (systematic error present)\n');
+    end
+    
+    % Identify dominant noise source
+    if angleErr < 2 * sigmaCRLB
+        dominantNoise = 'Centroid noise (measurement-limited)';
+    elseif triadInfo.residualMean > 100
+        dominantNoise = 'Motion blur (dynamics-limited)';
+    elseif triadInfo.residualStd / triadInfo.residualMean > 0.8
+        dominantNoise = 'Outliers or inconsistent measurements';
+    else
+        dominantNoise = 'Mixed noise sources';
+    end
+    fprintf('  Dominant source:     %s\n', dominantNoise);
 
 % DCM Error Matrix
 fprintf('\n--- Direction Cosine Matrix Error ---\n');
-DCM_error = DCM_estimated * DCM_true'; % Should be close to identity
-DCM_error_angles = [asin(DCM_error(3,2) - DCM_error(2,3)) / 2;
-                    asin(DCM_error(1,3) - DCM_error(3,1)) / 2;
-                    asin(DCM_error(2,1) - DCM_error(1,2)) / 2];
-DCM_error_angles_arcsec = rad2deg(DCM_error_angles) * 3600;
-fprintf('  Small-angle errors: [%.2f, %.2f, %.2f] arcsec\n', DCM_error_angles_arcsec);
-fprintf('  Frobenius norm:     %.2e ', norm(DCM_error - eye(3), 'fro'));
-if norm(DCM_error - eye(3), 'fro') < 1e-5
+
+DCMErr = DCMEst * DCMTrue'; % Should be close to identity
+DCM_errAngles = rad2deg([asin(DCMErr(3,2) - DCMErr(2,3)) / 2;
+                         asin(DCMErr(1,3) - DCMErr(3,1)) / 2;
+                         asin(DCMErr(2,1) - DCMErr(1,2)) / 2]) * 3600;
+
+fprintf('  Small-angle errors:  [%.2f, %.2f, %.2f] arcsec\n', DCM_errAngles);
+fprintf('  Frobenius norm:      %.2e  ', norm(DCMErr - eye(3), 'fro'));
+if norm(DCMErr - eye(3), 'fro') < 1e-5
     fprintf('✓ Excellent\n');
-elseif norm(DCM_error - eye(3), 'fro') < 1e-3
+elseif norm(DCMErr - eye(3), 'fro') < 1e-3
     fprintf('✓ Good\n');
 else
     fprintf('○ Acceptable\n');
 end
+
+% TRIAD-Specific Performance Analysis
+fprintf('\n--- TRIAD-Specific Analysis ---\n');
+    % TRIAD uses exactly 2 vectors (primary and secondary)
+    % Theoretical accuracy depends on vector weights and separation angle
+    nVectorsUsed  = 2;
+    weightRatio   = triadInfo.weightPrimary / triadInfo.weightSecondary;
+    separationAng = deg2rad(triadInfo.angleBetween);
+    
+    % TRIAD CRLB approximation (from Shuster 2007):
+    % σ_TRIAD² ≈ (σ₁² + σ₂²·sin²θ) / sin²θ
+    % where θ is angle between vectors, σ₁ and σ₂ are measurement uncertainties
+    % Simplified: σ_TRIAD ≈ σ_centroid / (sin(θ) * sqrt(2))
+    sigmaTriadFactor = 1 / (sin(separationAng) * sqrt(2));
+    sigmaTriad       = sigmaCentroid * sigmaTriadFactor;
+    
+    fprintf('  TRIAD CRLB:          %.2f arcsec (2 vectors, θ = %.1f°)\n', ...
+            sigmaTriad, triadInfo.angleBetween);
+    fprintf('  Primary weight:      %.4f (most accurate vector)\n', triadInfo.weightPrimary);
+    fprintf('  Secondary weight:    %.4f (ratio = %.2f:1)\n', ...
+            triadInfo.weightSecondary, weightRatio);
+    
+    % Compare actual error with TRIAD theoretical limit
+    fprintf('  Measured error:      %.2f arcsec\n', angleErr);
+    fprintf('  Ratio (error/TRIAD): %.2fx  ', angleErr / sigmaTriad);
+    if angleErr < 2 * sigmaTriad
+        fprintf('✓ Within 2σ of TRIAD CRLB\n');
+    elseif angleErr < 3 * sigmaTriad
+        fprintf('○ Within 3σ of TRIAD CRLB\n');
+    else
+        fprintf('⚠ Exceeds 3σ (systematic error present)\n');
+    end
+
+% TRIAD Optimality Assessment
+fprintf('\n--- TRIAD Optimality Assessment ---\n');
+    % Weight distribution analysis
+    if weightRatio > 3.0
+        fprintf('  Weight distribution: ✓ TRIAD optimal (σ₁ << σ₂, ratio %.1f:1)\n', weightRatio);
+        fprintf('                       Primary vector dominates accuracy as expected.\n');
+    elseif weightRatio > 1.5
+        fprintf('  Weight distribution: ○ TRIAD acceptable (moderate ratio %.1f:1)\n', weightRatio);
+        fprintf('                       QUEST may provide similar or slightly better accuracy.\n');
+    else
+        fprintf('  Weight distribution: ⚠ Vectors have similar weights (%.1f:1)\n', weightRatio);
+        fprintf('                       QUEST recommended: Better utilizes all %d observations.\n', triadInfo.nObs);
+    end
+    
+    % Vector separation analysis
+    if triadInfo.angleBetween > 30 && triadInfo.angleBetween < 150
+        fprintf('  Vector separation:   ✓ Good conditioning (%.1f°)\n', triadInfo.angleBetween);
+    elseif triadInfo.angleBetween > 15 && triadInfo.angleBetween < 165
+        fprintf('  Vector separation:   ○ Acceptable (%.1f°)\n', triadInfo.angleBetween);
+    else
+        fprintf('  Vector separation:   ⚠ Poor conditioning (%.1f°, near-collinear)\n', ...
+                triadInfo.angleBetween);
+    end
+    
+    % Unused observations warning
+    if triadInfo.nObs > 2
+        fprintf('  Additional stars:    %d observations not used by TRIAD\n', ...
+                triadInfo.nObs - 2);
+        fprintf('                       Consider QUEST to utilize all available measurements.\n');
+    end
 
 %% ========================================================================
 %  7. RESULTS VISUALIZATION
@@ -378,7 +389,7 @@ end
 
 % Generate comprehensive validation plots
 saveFlag = 1;
-plotTRIADResults(meas, N_STR, STR, DCM_true, DCM_estimated, ...
-                 q_true, q_estimated, triad_info, saveFlag);
+plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, ...
+                 qTrue, qEst, triadInfo, saveFlag);
 
 fprintf('\n=== All tasks completed successfully ===\n');

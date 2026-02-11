@@ -34,7 +34,7 @@ close all;
 clc;
 
 %% ========================================================================
-% 1. MAG HARDWARE PARAMETERS (Representative Space-Grade Fluxgate/AMR)
+% 1. MAG HARDWARE PARAMETERS (typical values from Space-Grade Fluxgate/AMR datasheets)
 % =========================================================================
 
 % --- General Configuration ---
