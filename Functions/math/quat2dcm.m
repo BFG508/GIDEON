@@ -1,6 +1,6 @@
-function DCM = quat2dcm_custom(q)
+function DCM = quat2dcm(q)
 %==========================================================================
-% quat2dcm_custom: Convert unit quaternion to Direction Cosine Matrix.
+% quat2dcm: Convert unit quaternion to Direction Cosine Matrix.
 %
 % Inputs:
 %   q - Unit quaternion in scalar-first convention (4x1):
@@ -11,7 +11,7 @@ function DCM = quat2dcm_custom(q)
 % Outputs:
 %   DCM - Direction Cosine Matrix (3x3), orthonormal with det(DCM) = 1.
 %         Represents passive rotation (coordinate transformation) from
-%         reference frame to body frame: v_body = DCM * v_reference
+%         reference frame to body frame: vBody = DCM * vReference
 %==========================================================================
 
     % Extract quaternion components using scalar-first convention

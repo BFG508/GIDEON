@@ -1,6 +1,6 @@
-function q_inv = quatinv_custom(q)
+function q_inv = quatinv(q)
 %==========================================================================
-% quatinv_custom: Compute the multiplicative inverse of a quaternion.
+% quatinv: Compute the multiplicative inverse of a quaternion.
 %
 % Inputs:
 %   q - Quaternion in scalar-first convention (4x1):

@@ -37,7 +37,7 @@ close all;
 clc;
 
 %% ========================================================================
-% 1. IMU HARDWARE PARAMETERS (Typical Space-Grade MEMS/FOG values)
+% 1. IMU HARDWARE PARAMETERS (typical values from Space-Grade MEMS/FOG datasheets)
 % =========================================================================
 
 % --- General Configuration ---
