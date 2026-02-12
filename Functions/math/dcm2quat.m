@@ -12,12 +12,12 @@ function q = dcm2quat(DCM)
 %==========================================================================
 
     % Trace of DCM
-    trace_DCM = trace(DCM);
+    traceDCM = trace(DCM);
     
     % Shepperd's method: select largest component to avoid division by small number
-    if trace_DCM > 0
+    if traceDCM > 0
         % qw is largest
-        s = sqrt(1 + trace_DCM) * 2;
+        s = sqrt(1 + traceDCM) * 2;
         qw = 0.25 * s;
         qx = (DCM(3,2) - DCM(2,3)) / s;
         qy = (DCM(1,3) - DCM(3,1)) / s;

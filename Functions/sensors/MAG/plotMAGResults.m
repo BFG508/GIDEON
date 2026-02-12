@@ -1,34 +1,30 @@
-function fig_handles = plotMAGResults(t, B_true_B, mag_meas, MAG, saveFlag)
+function fig = plotMAGResults(t, BTrue_body, meas, MAG, saveFlag)
 %==========================================================================
-% plotMAGResults - Generate comprehensive visualization of MAG simulation,
-%                  calibration artifacts, and navigation/attitude deltas.
-%
-% INPUTS:
-%   t             - Time vector [s], 1xN or Nx1
-%   B_true_B      - True magnetic field in BODY frame [nT], 3xN
-%   mag_meas      - MAG measurement struct:
-%                     .B_meas     [nT], 3xN (measured, typically Sensor frame)
-%                     .B_clean    [nT], 3xN (pre-quantization, Sensor frame)
-%                     .B_true_S   [nT], 3xN (truth in Sensor frame)
-%                     .bias_dyn   [nT], 3xN (dynamic bias in Sensor frame)
-%                     .bias_total [nT], 3xN (total bias in Sensor frame)
-%                     .B_det      [nT], 3xN (deterministic-only in Sensor frame)
+% plotMAGResults: Generate quicklook figures for MAG truth vs measurements.
+% Inputs:
+%   t             - Time vector                       [s], 1xN or Nx1
+%   BTrue_body    - True magnetic field in body frame [nT], 3xN
+%   meas          - MAG measurement struct:
+%                     .B                              [nT], 3xN
+%                     .BClean                         [nT], 3xN
+%                     .BDet                           [nT], 3xN
+%                     .biasDyn                        [nT], 3xN
+%                     .biasTotal                      [nT], 3xN
 %   MAG           - MAG parameter struct (optional fields used):
-%                     .DCM_B2S_true    (Body to Sensor true mounting DCM)
-%                     .resolution      [nT]
-%                     .range           [nT]
+%                     .DCM_mounting                   (3x3)
+%                     .resolution                     [nT]
+%                     .range                          [nT]
 %   saveFlag      - (Optional) If true, saves figures to Figures/MAG/
 %                   Default: false
 %
-% OUTPUTS:
-%   fig_handles   - Array of figure handles
+% Outputs:
+%   fig           - Array of figure handles
 %
-% FIGURES GENERATED (as available):
-%   1) Magnetic field error (components + norm) in BODY frame
-%   2) Magnetic field direction error (angle) and magnitude error
-%   3) Dynamic bias evolution (and total bias if available)
-%   4) 3D B-vector cloud (measured vs truth) to visualize ellipsoid distortion
-%      (useful for hard/soft-iron calibration validation)
+% Plots generated:
+%   1) Magnetic field error (components + norm) in body frame
+%   2) Magnetic field direction errorand magnitude error
+%   3) Dynamic bias evolution (Gauss-Markov drift)
+%   4) 3D B-vector cloud (measured vs truth)
 %==========================================================================
 
     if nargin < 5
@@ -39,7 +35,7 @@ function fig_handles = plotMAGResults(t, B_true_B, mag_meas, MAG, saveFlag)
     t = t(:).';
     N = numel(t);
     
-    fig_handles = gobjects(4,1);
+    fig = gobjects(4,1);
     Nfig = 0;
     
     % Prepare output directory if saving
@@ -51,153 +47,206 @@ function fig_handles = plotMAGResults(t, B_true_B, mag_meas, MAG, saveFlag)
         end
         fprintf('\n--- Saving MAG figures ---\n');
     end
-    
-    % --- Frame harmonization ---
-    % Truth in body frame is given: B_true_B (3xN)
-    if ~isequal(size(B_true_B), [3, N])
-        error('B_true_B must be 3xN with N = length(t).');
+
+    % Frame harmonization
+    % Truth in body frame is given: BTrue_body (3xN)
+    if ~isequal(size(BTrue_body), [3, N])
+        error('BTrue_body must be 3xN with N = length(t).');
     end
-    
-    % Determine measured B and convert to body frame.
-    B_meas_plot = MAG.DCM_B2S_true.' * mag_meas.B_meas;
-    B_true_plot = B_true_B;
+
+    % Measured B is in body frame already (meas.B is final digital output)
+    BMeas = meas.B;
+    BTrue = BTrue_body;
     
     %% ====================================================================
     % FIGURE 1: Magnetic Field Vector Error (Components + Norm)
     % =====================================================================
-    if ~isempty(B_meas_plot) && ~isempty(B_true_plot)
-        B_err = B_meas_plot - B_true_plot;
-        B_err_norm = vecnorm(B_err, 2, 1);
-        
-        Nfig = Nfig + 1;
-        fig_handles(Nfig) = figure('Name', 'MAG - B Vector Error', ...
-            'Color', 'w', 'NumberTitle', 'off');
-        
-        axlbl = {'x','y','z'};
-        for i = 1:3
-            subplot(4,1,i);
-            plot(t, B_err(i,:), 'b-', 'LineWidth', 1.2);
-            grid on;
-            ylabel(sprintf('\\DeltaB_%s [nT]', axlbl{i}), 'FontSize', 11, 'FontWeight', 'bold');
-            if i == 1
-                title(sprintf('Magnetic Field Error'), 'FontSize', 13, 'FontWeight', 'bold');
-            end
-            set(gca, 'FontSize', 10);
-            xlim([t(1), t(end)]);
+    
+    Nfig = Nfig + 1;
+    fig(Nfig) = figure('Name', 'MAG - B Vector Error', ...
+                        'Color', 'w', 'NumberTitle', 'off', ...
+                        'Position', [500, 100, 1000, 800]);
+
+    BErr     = BMeas - BTrue;
+    BErrNorm = vecnorm(BErr, 2, 1);
+    
+    axesLabels = {'x','y','z'};
+    for i = 1:3
+        subplot(4,1,i);
+        plot(t, BErr(i,:), 'b-', 'LineWidth', 1.2);
+        ylabel(sprintf('\\DeltaB_%s [nT]', axesLabels{i}), 'FontSize', 11, 'FontWeight', 'bold');
+        if i == 1
+            title('Magnetic Field Error (Body Frame)', 'FontSize', 13, 'FontWeight', 'bold');
         end
-        
-        subplot(4,1,4);
-        plot(t, B_err_norm, 'k-', 'LineWidth', 1.2);
+
         grid on;
-        xlabel('Time [s]', 'FontSize', 11, 'FontWeight', 'bold');
-        ylabel('\Delta||B|| [nT]', 'FontSize', 11, 'FontWeight', 'bold');
         set(gca, 'FontSize', 10);
         xlim([t(1), t(end)]);
-        
-        if saveFlag
-            saveFigure(fig_handles(Nfig), saveDir, 'MAG_fig1_B_error');
-        end
+    end
+    
+    subplot(4,1,4);
+    plot(t, BErrNorm, 'k-', 'LineWidth', 1.2);
+    xlabel('Time [s]', 'FontSize', 11, 'FontWeight', 'bold');
+    ylabel('||\DeltaB|| [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+
+    grid on;
+    set(gca, 'FontSize', 10);
+    xlim([t(1), t(end)]);
+    
+    if saveFlag
+        saveFigure(fig(Nfig), saveDir, 'MAG_fig1_B_error');
     end
     
     %% ====================================================================
     % FIGURE 2: Direction and Magnitude Error
     % =====================================================================
-    u_true = B_true_plot ./ vecnorm(B_true_plot, 2, 1);
-    u_meas = B_meas_plot ./ vecnorm(B_meas_plot, 2, 1);
-    
-    cang = sum(u_true .* u_meas, 1);
-    cang = max(min(cang, 1), -1);
-    ang_err = rad2deg(acos(cang));
-    
-    B_mag_true = vecnorm(B_true_plot, 2, 1);
-    B_mag_meas = vecnorm(B_meas_plot, 2, 1);
-    mag_err    = B_mag_meas - B_mag_true;
     
     Nfig = Nfig + 1;
-    fig_handles(Nfig) = figure('Name', 'MAG - Direction & Magnitude Error', ...
-        'Color', 'w', 'NumberTitle', 'off');
+    fig(Nfig) = figure('Name', 'MAG - Direction & Magnitude Error', ...
+                       'Color', 'w', 'NumberTitle', 'off');
+
+    uTrue = BTrue ./ vecnorm(BTrue, 2, 1);
+    uMeas = BMeas ./ vecnorm(BMeas, 2, 1);
+    
+    cosAng = max(min(sum(uTrue .* uMeas, 1), 1), -1);
+    angErr = rad2deg(acos(cosAng));
+    
+    BMagTrue = vecnorm(BTrue, 2, 1);
+    BMagMeas = vecnorm(BMeas, 2, 1);
+    magErr   = BMagMeas - BMagTrue;
     
     subplot(2,1,1);
-    plot(t, ang_err, 'm-', 'LineWidth', 1.2);
-    grid on;
+    plot(t, angErr, 'm-', 'LineWidth', 1.2);
     ylabel('Angle [deg]', 'FontSize', 11, 'FontWeight', 'bold');
-    title(sprintf('Field Direction Error'), 'FontSize', 13, 'FontWeight', 'bold');
+    title('Field Direction Error', 'FontSize', 13, 'FontWeight', 'bold');
+
     set(gca, 'FontSize', 10);
+    grid on;
     xlim([t(1), t(end)]);
     
     subplot(2,1,2);
-    plot(t, mag_err, 'b-', 'LineWidth', 1.2);
-    grid on;
+    plot(t, magErr, 'b-', 'LineWidth', 1.2);
     xlabel('Time [s]', 'FontSize', 11, 'FontWeight', 'bold');
-    ylabel('||B|| [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    ylabel('\\Delta||B|| [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+
     set(gca, 'FontSize', 10);
+    grid on;
     xlim([t(1), t(end)]);
     
     if saveFlag
-        saveFigure(fig_handles(Nfig), saveDir, 'MAG_fig2_direction_magnitude_error');
+        saveFigure(fig(Nfig), saveDir, 'MAG_fig2_direction_magnitude_error');
     end
     
     %% ====================================================================
     % FIGURE 3: Dynamic Bias Evolution
     % =====================================================================
+
     Nfig = Nfig + 1;
-    fig_handles(Nfig) = figure('Name', 'MAG - Bias Drift', ...
-                               'Color', 'w', 'NumberTitle', 'off');
-
-    bias_plot = MAG.DCM_B2S_true.' * mag_meas.bias_dyn;
-
+    fig(Nfig) = figure('Name', 'MAG - Bias Drift', ...
+                       'Color', 'w', 'NumberTitle', 'off');
+    
+    % Bias is in MAG frame, rotate to body for plotting
+    biasDynBody = MAG.DCM_mounting' * meas.biasDyn;
+    
     hold on;
-    plot(t, bias_plot(1,:), 'r', 'LineWidth', 1.2, 'DisplayName', 'x');
-    plot(t, bias_plot(2,:), 'g', 'LineWidth', 1.2, 'DisplayName', 'y');
-    plot(t, bias_plot(3,:), 'b', 'LineWidth', 1.2, 'DisplayName', 'z');
+    plot(t, biasDynBody(1,:), 'r', 'LineWidth', 1.2, 'DisplayName', 'x');
+    plot(t, biasDynBody(2,:), 'g', 'LineWidth', 1.2, 'DisplayName', 'y');
+    plot(t, biasDynBody(3,:), 'b', 'LineWidth', 1.2, 'DisplayName', 'z');
     hold off;
     
-    grid on;
     xlabel('Time [s]', 'FontSize', 11, 'FontWeight', 'bold');
     ylabel('Dynamic Bias [nT]', 'FontSize', 11, 'FontWeight', 'bold');
-    title(sprintf('MAG Dynamic Bias Random Walk'), 'FontSize', 13, 'FontWeight', 'bold');
+    title('MAG Dynamic Bias (Gauss-Markov Process)', 'FontSize', 13, 'FontWeight', 'bold');
     legend('Location', 'northoutside', 'Orientation', 'horizontal', ...
            'FontSize', 10);
+
     set(gca, 'FontSize', 10);
+    grid on;
     xlim([t(1), t(end)]);
     
     if saveFlag
-        saveFigure(fig_handles(Nfig), saveDir, 'MAG_fig3_bias_drift');
+        saveFigure(fig(Nfig), saveDir, 'MAG_fig3_bias_drift');
     end
     
     %% ====================================================================
-    % FIGURE 4: 3D B-Vector Cloud (Measured vs Truth) (Calibration Insight)
+    % FIGURE 4: 3D B-Vector Cloud + 2D Projections (Measured vs Truth)
     % =====================================================================
+
     Nfig = Nfig + 1;
-    fig_handles(Nfig) = figure('Name', 'MAG - 3D B Cloud', ...
-        'Color', 'w', 'NumberTitle', 'off');
+    fig(Nfig) = figure('Name', 'MAG - B Cloud (3D + Projections)', ...
+                       'Color', 'w', 'NumberTitle', 'off', ...
+                       'Position', [100, 100, 1000, 800]);
     
     % Downsample for plotting performance if needed
     idx = 1:N;
     if N > 8000
         idx = round(linspace(1, N, 8000));
     end
-   
+    
+    % ---- (1) Top-Left: x vs y ----
+    subplot(2,2,1);
+    plot(BTrue(1,idx), BTrue(2,idx), 'b-', 'MarkerSize', 4, 'DisplayName', 'Truth');
     hold on;
-    plot3(B_true_plot(1,idx), B_true_plot(2,idx), B_true_plot(3,idx), ...
-          'b-', 'DisplayName', 'Truth');
-    plot3(B_meas_plot(1,idx), B_meas_plot(2,idx), B_meas_plot(3,idx), ...
-          'r-', 'DisplayName', 'Measured');
+    plot(BMeas(1,idx), BMeas(2,idx), 'r-', 'MarkerSize', 4, 'DisplayName', 'Measured');
     hold off;
     
-    grid on; 
-    axis equal;
+
+    xlabel('B_x [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    ylabel('B_y [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    title('B_x vs B_y', 'FontSize', 12, 'FontWeight', 'bold');
+    grid on;
+    set(gca, 'FontSize', 10);
+    
+    % ---- (2) Top-Right: x vs z ----
+    subplot(2,2,2);
+    plot(BTrue(1,idx), BTrue(3,idx), 'b-', 'MarkerSize', 4, 'DisplayName', 'Truth'); 
+    hold on;
+    plot(BMeas(1,idx), BMeas(3,idx), 'r-', 'MarkerSize', 4, 'DisplayName', 'Measured'); 
+    hold off;
+
+    xlabel('B_x [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    ylabel('B_z [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    title('B_x vs B_z', 'FontSize', 12, 'FontWeight', 'bold');
+    grid on;
+    set(gca, 'FontSize', 10);
+    
+    % ---- (3) Bottom-Left: y vs z ----
+    subplot(2,2,3);
+    plot(BTrue(2,idx), BTrue(3,idx), 'b-', 'MarkerSize', 4, 'DisplayName', 'Truth');
+    hold on;
+    plot(BMeas(2,idx), BMeas(3,idx), 'r-', 'MarkerSize', 4, 'DisplayName', 'Measured'); 
+    hold off;
+    
+    xlabel('B_y [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    ylabel('B_z [nT]', 'FontSize', 11, 'FontWeight', 'bold');
+    title('B_y vs B_z', 'FontSize', 12, 'FontWeight', 'bold');
+    grid on;
+    set(gca, 'FontSize', 10);
+    
+    % ---- (4) Bottom-Right: 3D cloud ----
+    subplot(2,2,4);
+    plot3(BTrue(1,idx), BTrue(2,idx), BTrue(3,idx), ...
+          'b-', 'MarkerSize', 4, 'DisplayName', 'Truth');
+    hold on;
+    plot3(BMeas(1,idx), BMeas(2,idx), BMeas(3,idx), ...
+          'r-', 'MarkerSize', 4, 'DisplayName', 'Measured'); hold off;
+
     xlabel('B_x [nT]', 'FontSize', 11, 'FontWeight', 'bold');
     ylabel('B_y [nT]', 'FontSize', 11, 'FontWeight', 'bold');
     zlabel('B_z [nT]', 'FontSize', 11, 'FontWeight', 'bold');
-    title(sprintf('3D Magnetic Field Cloud'), 'FontSize', 13, 'FontWeight', 'bold');
-    legend('Location', 'northoutside', 'Orientation', 'horizontal', ...
-           'FontSize', 10);
+    title('3D Magnetic Field Cloud', 'FontSize', 12, 'FontWeight', 'bold');
+
+    grid on;
     set(gca, 'FontSize', 10);
     view(35, 25);
     
+    % One legend for the whole figure (simple approach: put it in the last axes)
+    lgd = legend('Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', 10);
+    lgd.Position(1) = 0.5 - lgd.Position(3)/2;
+    lgd.Position(2) = 0.96;
+    
     if saveFlag
-        saveFigure(fig_handles(Nfig), saveDir, 'MAG_fig4_3D_cloud');
+        saveFigure(fig(Nfig), saveDir, 'MAG_fig4_3D_cloud');
     end
     
 end

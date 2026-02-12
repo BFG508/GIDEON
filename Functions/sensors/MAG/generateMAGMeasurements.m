@@ -1,52 +1,70 @@
-function mag_meas = generateMAGMeasurements(t, B_true_B, MAG)
+function meas = generateMAGMeasurements(t, BTrue_body, MAG)
 %==========================================================================
 % generateMAGMeasurements: Generate synthetic magnetometer measurements
 %                          from truth magnetic field data using a realistic
-%                          error model (Fluxgate/AMR sensor).
+%                          error model (Fluxgate/AMR MAG).
 %
 % Inputs:
-%   t                       - Time vector [s], 1xN
-%   B_true_B                - True magnetic field vector in body frame [nT], 3xN
-%   MAG                     - Magnetometer parameter struct (see mainMAG.m)
-%                             Must contain:
-%                             .dt, .T_Deterministic, .biasHardIron, .sigma_white
-%                             .biasInstability, .range, .resolution
+%   t                  - Time vector                                    [s], 1xN
+%   BTrue_body         - True magnetic field vector in body frame       [nT], 3xN
+%   MAG                - Magnetometer parameter structure with required fields:
+%                        .dt              - Sampling time               [s]
+%                        .M_Deterministic - Deterministic transform     3x3
+%                        .biasHardIron    - Static hard iron bias       [nT], 3x1
+%                        .sigmaWhite      - White noise RMS             [nT]
+%                        .biasTau         - Bias correlation time       [s]
+%                        .biasInstability - Steady-state bias sigma     [nT]
+%                        .range           - Full scale range            [nT]
+%                        .resolution      - Digital quantization step   [nT]
 %
-% Outputs (struct mag_meas):
-%   mag_meas.B_meas         - Measured magnetic field [nT], 3xN
-%   mag_meas.bias_hard_dyn  - Dynamic bias history (drift) [nT], 3xN
-%   mag_meas.B_clean        - Signal before quantization/noise (debug)
+% Outputs (struct meas):
+%   meas.B_body        - Measured magnetic field (Digital)              [nT], 3xN
+%   meas.biasDyn       - Dynamic bias history (Drift)                   [nT], 3xN
+%   meas.BClean        - Analog signal (Deterministic + Bias + Noise)   [nT], 3xN
 %
 % Algorithm:
-%   B_meas = Quantize( T_det * B_true + b_hard_static + b_dynamic + noise )
+%   The measurement model simulates the signal path of a vector magnetometer:
+%     B_meas = Quantize( Saturate( T_det * B_true + b_hard + b_dyn + noise ) )
 %
-%   1. Deterministic Transform (Soft Iron + Non-Orthogonality + Mounting)
-%   2. Add Static Hard Iron Bias
-%   3. Add Dynamic Bias (Random Walk / Flicker model)
-%   4. Add Wideband Gaussian Noise
-%   5. Saturate to Dynamic Range
-%   6. Quantize to Digital Resolution
+%   1. Deterministic Distortion (Soft Iron, Non-Orthogonality, Scale Factor):
+%      B_det = M_Deterministic * B_true_body
+%
+%   2. Bias Application:
+%      - Static Hard Iron: Constant offset (biasHardIron)
+%      - Dynamic Drift: 1st-order Gauss-Markov process (bDyn)
+%        bDyn[k+1] = exp(-dt/tau)*bDyn[k] + wBias[k]
+%
+%   3. MAG Noise:
+%      - Add wideband white Gaussian noise (sigmaWhite)
+%
+%   4. Analog Signal Conditioning:
+%      B_analog = BDet + biasHardIron + bDyn + noise
+%
+%   5. Digitization (ADC):
+%      - Saturation to full-scale range (+/- MAG.range)
+%      - Uniform quantization (MAG.resolution)
 %==========================================================================
 
-    % --- Basic Input Validation ---
+    fprintf('\n=== Simulating IMU Measurements ===\n');
+
+    % -Basic input validation
     if nargin < 3
         error('generateMAGMeasurements: Not enough input arguments.');
     end
 
     N = numel(t);
-    if ~isequal(size(B_true_B), [3, N])
-        error('B_true_B must have size 3xN with N = length(t).');
+    if ~isequal(size(BTrue_body), [3, N])
+        error('BTrue_body must have size 3xN with N = length(t).');
     end
 
     % Pre-allocate outputs
-    mag_meas.B_meas     = zeros(3, N);
-    mag_meas.B_clean    = zeros(3, N);
-    mag_meas.B_true_S   = zeros(3, N);
-    mag_meas.B_det      = zeros(3, N);
-    mag_meas.bias_dyn   = zeros(3, N);
-    mag_meas.bias_total = zeros(3, N);
+    meas.B         = zeros(3, N);
+    meas.BClean    = zeros(3, N);
+    meas.BDet      = zeros(3, N);
+    meas.biasDyn   = zeros(3, N);
+    meas.biasTotal = zeros(3, N);
 
-    % Noise (white)
+    % Whie noise
     sigmaWhite = MAG.sigmaWhite;
 
     % Bounded bias drift (1st-order Gauss-Markov)
@@ -56,49 +74,45 @@ function mag_meas = generateMAGMeasurements(t, B_true_B, MAG)
     else
         a = exp(-MAG.dt / tau);
     end
-    sigmaSS = MAG.biasInstability;       % Steady-State 1-sigma (per axis)
-    q = sqrt(max(1 - a^2, 0)) * sigmaSS; % Driving noise std per step
+    sigmaSS = MAG.biasInstability;             % Steady-State 1σ (per axis)
+    q       = sqrt(max(1 - a^2, 0)) * sigmaSS; % Driving noise STD per step
 
-    bias_dyn = zeros(3,1);
+    biasDyn = zeros(3,1);
 
     % Limits
-    max_range  = MAG.range;
+    maxRange   = MAG.range;
     resolution = MAG.resolution;
 
     for k = 1:N
-        % 1) Body truth -> Sensor truth (mounting applied)
-        B_true_S = MAG.DCM_B2S_true * B_true_B(:,k);
-        mag_meas.B_true_S(:,k) = B_true_S;
+        % 1) Deterministic distortion in MAG axes
+        BDet = MAG.M_Deterministic * BTrue_body(:,k);
+        meas.BDet(:,k) = BDet;
 
-        % 2) Deterministic distortion in sensor axes
-        B_det = MAG.M_Deterministic * B_true_S;
-        mag_meas.B_det(:,k) = B_det;
+        % 2) Dynamic bias update (Gauss-Markov)
+        biasDyn = a * biasDyn + q * randn(3,1);
+        meas.biasDyn(:,k) = biasDyn;
 
-        % 3) Dynamic bias update (Gauss-Markov)
-        bias_dyn = a * bias_dyn + q * randn(3,1);
-        mag_meas.bias_dyn(:,k) = bias_dyn;
+        % 3) Total bias (static + dynamic)
+        biasTotal = MAG.biasHardIron + biasDyn;
+        meas.biasTotal(:,k) = biasTotal;
 
-        % 4) Total bias (static + dynamic)
-        b_total = MAG.biasHardIron + bias_dyn;
-        mag_meas.bias_total(:,k) = b_total;
-
-        % 5) White noise
+        % 4) White noise
         noise_k = sigmaWhite * randn(3,1);
 
-        % 6) Analog (pre-quantization)
-        B_analog = B_det + b_total + noise_k;
-        mag_meas.B_clean(:,k) = B_analog;
+        % 5) Analog (pre-quantization)
+        BAnalog = BDet + biasTotal + noise_k;
+        meas.BClean(:,k) = BAnalog;
 
-        % 7) Saturation
-        B_clip = max(min(B_analog, max_range), -max_range);
+        % 6) Saturation
+        BClip = max(min(BAnalog, maxRange), -maxRange);
 
-        % 8) Quantization
+        % 7) Quantization
         if resolution > 0
-            B_dig = round(B_clip / resolution) * resolution;
+            BDig = round(BClip / resolution) * resolution;
         else
-            B_dig = B_clip;
+            BDig = BClip;
         end
 
-        mag_meas.B_meas(:,k) = B_dig;
+        meas.B(:,k) = BDig;
     end
 end
