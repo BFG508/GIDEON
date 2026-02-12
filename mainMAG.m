@@ -4,28 +4,66 @@
 %
 % DESCRIPTION:
 %   Simulation framework for generating high-fidelity synthetic 3-axis
-%   Magnetometer data for spacecraft AOCS/GNC. This script models
-%   environmental magnetic fields (IGRF) and realistic sensor error sources
-%   including hard iron (bias), soft iron (scale/non-orthogonality), and
-%   stochastic noise (wideband + bias instability).
+%   magnetometer data for spacecraft AOCS/GNC development. This script
+%   models environmental magnetic fields (IGRF) and realistic sensor error
+%   sources including deterministic errors (hard iron, soft iron, 
+%   non-orthogonality) and stochastic noise processes (white noise, bias 
+%   instability).
 %
 % PURPOSE:
-%   1. Define hardware specifications for typical space-grade Fluxgates/AMR.
-%   2. Generate "Truth" magnetic field vectors (Orbit + IGRF model).
-%   3. Simulate sensor measurement corruption.
-%   4. Validate magnetometer calibration algorithms (e.g., TWO-STEP).
+%   Demonstrates high-fidelity magnetometer error modeling for spacecraft
+%   AOCS/GNC applications using realistic orbital dynamics, Earth magnetic
+%   field models, and sensor noise. Validates error models through residual
+%   analysis and provides ground truth for calibration algorithm testing.
 %
 % ALGORITHM:
 %   The measurement model follows the standard equation:
-%     B_meas = T_det * B_true + b_hard_iron + b_temp + noise
-%   
+%     B_meas = M_det * B_true + b_hard_iron + b_dynamic + noise
+% 
 %   where:
-%     T_det       = M_SoftIron * M_NonOrth * DCM_Mounting
-%     M_SoftIron  = Scale Factor / Soft Iron matrix (near identity)
-%     M_NonOrth   = Non-orthogonality matrix
-%     b_hard_iron = Constant offset (Hard Iron + Electronic Bias)
-%     b_temp      = Temperature-dependent slowly varying bias
-%     noise       = Wideband Gaussian noise
+%     M_det       : M_SoftIron * M_NonOrth * DCM_Mounting (Deterministic Transform)
+%     b_hard_iron : Static hard iron bias                 (Constant per run)
+%     b_dynamic   : Dynamic bias drift                    (Gauss-Markov process)
+%     noise       : High-frequency white noise            (Gaussian)
+% 
+% WORKFLOW:
+%   1. Define MAG hardware parameters (sensor specifications) and generate
+%      mounting misalignment and deterministic error matrices
+%   2. Propagate orbital trajectory (J2 + Drag + SRP perturbations)
+%   3. Compute Earth magnetic field using IGRF-13 model
+%   4. Generate truth attitude trajectory and rotate field to body frame
+%   5. Simulate MAG measurements with realistic error corruption
+%   6. Validate error models: RMS errors, noise statistics, angular errors
+%   7. Generate diagnostic plots for calibration validation
+%
+% KEY FEATURES:
+%   - Space-grade magnetometer specifications (Fluxgate/AMR)
+%   - Realistic error models: hard/soft iron, bias instability, white noise
+%   - Deterministic errors: scale factor, non-orthogonality, mounting
+%   - IGRF-13 geomagnetic field model with orbital propagation
+%   - Attitude dynamics integration for body-frame field
+%   - Calibration validation: 3D field clouds, projection plots
+%   - Publication-quality figures (saved as FIG, PNG, SVG)
+%
+% OUTPUTS:
+%   - meas:               Structure with corrupted measurements
+%   - Error statistics:   RMS field errors, noise verification, angular errors
+%   - Ground truth:       Orbital position, attitude, magnetic field vectors
+%   - Calibration data:   3D point clouds for ellipsoid fitting algorithms
+%   - Diagnostic figures: 4 plots in Figures/MAG/ directory
+%
+% CONFIGURATION:
+%   Edit Section 1 (initializeMAG.m) for:
+%   - MAG hardware specifications (noise density, bias instability)
+%   - Mounting misalignment errors
+%   - Sampling rate
+%   - Deterministic error limits (hard iron, soft iron, non-orthogonality)
+%
+%   Edit Section 2 for:
+%   - Simulation duration and epoch
+%   - Orbital elements (SMA, ECC, INC, RAAN, AOP, TA)
+%   - Spacecraft parameters (mass, drag/SRP areas)
+%   - Attitude dynamics profile (angular rates)
 %==========================================================================
 
 clear;
@@ -36,84 +74,7 @@ clc;
 % 1. MAG HARDWARE PARAMETERS (typical values from Space-Grade Fluxgate/AMR datasheets)
 % =========================================================================
 
-% --- General Configuration ---
-MAG.rate = 10;           % Sampling frequency [Hz]
-MAG.dt   = 1 / MAG.rate; % Sampling time step [s]
-
-% Dynamic Range & Resolution       
-MAG.range      = 100000; % [nT] +/- full scale
-MAG.resolution = 0.5;    % [nT] ADC quantization step
-
-% Mounting misalignment errors (typical mechanical tolerances)
-rollErr  =  0.002; % Mounting error around X-axis [deg]
-pitchErr = -0.005; % Mounting error around Y-axis [deg]
-yawErr   =  0.003; % Mounting error around Z-axis [deg]
-
-% Construct misalignment DCM (small perturbation from ideal alignment)
-% This matrix is shared between gyro and accel (common mechanical mounting).
-MAG.DCM_mounting = angle2dcm(deg2rad(yawErr), ...
-                             deg2rad(pitchErr), ...
-                             deg2rad(rollErr), ...
-                             'ZYX');
-
-% --- Stochastic Noise Parameters ---
-    MAG.noiseDensity = 0.1;               % White noise spectral density [nT/sqrt(Hz)]
-    
-    % Anti-alias / measurement bandwidth model for noise integration
-    MAG.antiAlias.type = "onePole";       % "idealNyquist" | "onePole"
-    MAG.antiAlias.fc   = 0.25 * MAG.rate; % [Hz]
-    
-    % Bias drift as bounded 1st-order Gauss-Markov process
-    MAG.biasInstability = 5.0;            % Steady-state    [nT] (1σ, per axis)
-    MAG.biasTau         = 3600;           % Correlation time [s]
-
-% --- Deterministic Errors ---
-    MAG.hardIronLim      = 500.0;         % Static hard-iron magnitude limit [nT] (per axis, uniform)
-    MAG.SF               = 1000;          % Diagonal scale errors [ppm] (1σ)
-    MAG.softIronCoupling = 500;           % Off-diagonal symmetric coupling [ppm] (1σ)
-    MAG.nonortho         = 0.1;           % Small non-orthogonality angles [deg] (1σ)
-
-% --- Derived Matrices & Pre-Allocation ---
-fprintf('\n=== Initializing MAG Model ===\n');
-
-    % Soft iron / Scale factor (symmetric matrix near identity)
-    SFErr  =               (MAG.SF * 1e-6) .* randn(3,1);
-    SICErr = (MAG.softIronCoupling * 1e-6) .* randn(3,1); % xy, xz, yz couplings
-    MAG.M_SoftIron = eye(3) + [ SFErr(1), SICErr(1), SICErr(2);
-                               SICErr(1),  SFErr(2), SICErr(3);
-                               SICErr(2), SICErr(3),  SFErr(3)];
-     
-    fprintf(' Soft-Iron / Scale-Factor Matrix: [%+.6f  %+.6f  %+.6f]\n', MAG.M_SoftIron(1,1), MAG.M_SoftIron(1,2), MAG.M_SoftIron(1,3));
-    fprintf('                                  [%+.6f  %+.6f  %+.6f]\n', MAG.M_SoftIron(2,1), MAG.M_SoftIron(2,2), MAG.M_SoftIron(2,3));
-    fprintf('                                  [%+.6f  %+.6f  %+.6f]\n', MAG.M_SoftIron(3,1), MAG.M_SoftIron(3,2), MAG.M_SoftIron(3,3));
-    
-    % Non-orthogonality (small-angle upper triangular correction)
-    nonorthErr = deg2rad(MAG.nonortho) .* randn(3,1);
-    MAG.M_Nonorth = [             1, -nonorthErr(3),  nonorthErr(2);
-                     -nonorthErr(3),              1, -nonorthErr(1);
-                      nonorthErr(2), -nonorthErr(1),              1];
-    
-    % Deterministic MAG matrix acting in MAG frame (after mounting)
-    MAG.M_Deterministic = MAG.M_SoftIron * MAG.M_Nonorth * MAG.DCM_mounting;
-
-% Static hard-iron bias (MAG axes)
-MAG.biasHardIron = MAG.hardIronLim * (2*rand(3,1) - 1);
-
-fprintf(' Hard Iron Bias (MAG):            [%.2f, %.2f, %.2f] nT\n', MAG.biasHardIron(1), MAG.biasHardIron(2), MAG.biasHardIron(3));
-
-% White noise RMS per sample from density and assumed bandwidth
-if string(MAG.antiAlias.type) == "idealNyquist"
-    BW = MAG.antiAlias.fc/2;
-elseif string(MAG.antiAlias.type) == "onePole"
-    BW = 1.57 * MAG.antiAlias.fc; % ENBW for 1-pole low-pass
-else
-    BW = MAG.antiAlias.fc/2;
-end
-MAG.sigmaWhite = MAG.noiseDensity * sqrt(BW);
-
-fprintf(' White Noise RMS:                 %.4f nT (per axis)\n', MAG.sigmaWhite);
-
-fprintf('=== MAG Initialization Complete ===\n');
+MAG = initializeMAG();
 
 %% ========================================================================
 % 2. SIMULATION SETTINGS & GROUND TRUTH GENERATION

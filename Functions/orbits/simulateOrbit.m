@@ -1,7 +1,7 @@
 function [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams)
 %==========================================================================
 % simulateOrbit: Propagates a spacecraft orbit in the ECI frame using numerical integration
-%                (ODE113). The force model includes Earth's J2 oblateness (zonal harmonic),
+%                (ode113). The force model includes Earth's J2 oblateness (zonal harmonic),
 %                atmospheric drag with exponential density, and solar radiation pressure (SRP).
 %                It handles eclipses for SRP and Earth rotation effects for drag.
 %

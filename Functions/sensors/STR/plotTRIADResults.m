@@ -1,6 +1,6 @@
 function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, triadInfo, saveFlag)
 %==========================================================================
-% plotQUESTResults: Generate comprehensive visualization of QUEST attitude
+% plotTRIADResults: Generate comprehensive visualization of TRIAD attitude
 %                   determination results as separate figures.
 %
 % Inputs:
@@ -56,11 +56,11 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     
     % Adjust figure size based on number of active STRs
     if nSTR == 1
-        fig(1) = figure('Name', 'QUEST - Star Field', ...
+        fig(1) = figure('Name', 'TRIAD - Star Field', ...
                                 'Color', 'w', 'NumberTitle', 'off', ...
                                 'Position', [100, 100, 700, 600]);
     else
-        fig(1) = figure('Name', 'QUEST - Star Field', ...
+        fig(1) = figure('Name', 'TRIAD - Star Field', ...
                                 'Color', 'w', 'NumberTitle', 'off', ...
                                 'Position', [100, 100, 1400, 600]);
     end
@@ -156,7 +156,7 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     end
     
     % --- Shared Legend ---
-    lgd = legend(hBoundary, 'Sensor Boundary', ...
+    lgd = legend(hBoundary, 'STR Boundary', ...
                  'Location', 'northoutside', 'FontSize', 11);
     if nSTR == 2
         lgd.Position = [0.42, 0.92, 0.15, 0.05]; % Centered at top
@@ -164,14 +164,14 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     drawnow; % Force rendering
     
     if saveFlag
-        saveFigure(fig(1), figDir, 'QUEST_fig1_star_field');
+        saveFigure(fig(1), figDir, 'TRIAD_fig1_star_field');
     end
     
     %% ====================================================================
     %  FIGURE 2: Residual Distribution Histogram
     % =====================================================================
     
-    fig(2) = figure('Name', 'QUEST - Residuals', ...
+    fig(2) = figure('Name', 'TRIAD - Residuals', ...
                             'Color', 'w', 'NumberTitle', 'off');
     
     histogram(residuals, 30, 'FaceColor', [0.2 0.6 0.9], ...
@@ -198,14 +198,14 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     set(gca, 'FontSize', 11);
     
     if saveFlag
-        saveFigure(fig(2), figDir, 'QUEST_fig2_residuals');
+        saveFigure(fig(2), figDir, 'TRIAD_fig2_residuals');
     end
     
     %% ====================================================================
     %  FIGURE 3: DCM Error Heatmap
     % =====================================================================
     
-    fig(3) = figure('Name', 'QUEST - DCM Error', ...
+    fig(3) = figure('Name', 'TRIAD - DCM Error', ...
                             'Color', 'w', 'NumberTitle', 'off');
     
     DCMErr        = DCMEst - DCMTrue;
@@ -247,14 +247,14 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     drawnow; % Force MATLAB to complete rendering
     
     if saveFlag
-        saveFigure(fig(3), figDir, 'QUEST_fig3_DCM_error');
+        saveFigure(fig(3), figDir, 'TRIAD_fig3_DCM_error');
     end
     
     %% ====================================================================
     %  FIGURE 4: Quaternion Comparison
     % =====================================================================
     
-    fig(4) = figure('Name', 'QUEST - Quaternion', ...
+    fig(4) = figure('Name', 'TRIAD - Quaternion', ...
                             'Color', 'w', 'NumberTitle', 'off');
     
     % Force same sign convention for visualization (use qTrue as reference)
@@ -293,14 +293,14 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     ylim([min(barData(:))*1.1, max(barData(:))*1.1]);
     
     if saveFlag
-        saveFigure(fig(4), figDir, 'QUEST_fig4_quaternion');
+        saveFigure(fig(4), figDir, 'TRIAD_fig4_quaternion');
     end
     
     %% ====================================================================
     %  FIGURE 5: Residuals vs. Star Magnitude
     % =====================================================================
     
-    fig(5) = figure('Name', 'QUEST - Residuals vs Magnitude', ...
+    fig(5) = figure('Name', 'TRIAD - Residuals vs Magnitude', ...
                             'Color', 'w', 'NumberTitle', 'off');
     
     % Collect all magnitudes
@@ -358,7 +358,7 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     drawnow; % Force MATLAB to complete rendering
     
     if saveFlag
-        saveFigure(fig(5), figDir, 'QUEST_fig5_residuals_vs_mag');
+        saveFigure(fig(5), figDir, 'TRIAD_fig5_residuals_vs_mag');
     end
     
     %% ====================================================================
