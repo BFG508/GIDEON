@@ -155,7 +155,7 @@ function fig = plotQUESTResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, q
     end
     
     % --- Shared Legend ---
-    lgd = legend(hBoundary, 'Sensor Boundary', ...
+    lgd = legend(hBoundary, 'STR Boundary', ...
                  'Location', 'northoutside', 'FontSize', 11);
     if nSTR == 2
         lgd.Position = [0.42, 0.92, 0.15, 0.05]; % Centered at top
