@@ -46,6 +46,7 @@ function meas = generateSTRMeasurements(STR, nSTR, catalog, DCMTrue, omegaBody)
 %   - Noise model: σ_i = σ_ref * 10^(0.2*(mag_i - mag_ref)) (SNR scaling).
 %   - Weight formula: w ∝ 10^(-0.4*mag) = 1/σ_i^2 (optimal weighting).
 %==========================================================================
+
     fprintf('\n=== Simulating Star Tracker Measurements ===\n');
     
     % Pre-allocate measurement structure array

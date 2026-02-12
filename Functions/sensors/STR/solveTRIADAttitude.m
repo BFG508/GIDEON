@@ -5,22 +5,22 @@ function [qEst, DCMEst, triadInfo] = solveTRIADAttitude(meas, nSTR)
 %
 % Inputs:
 %   meas       - Structure array (1 x nSTR) with star tracker measurements:
-%                .nStars        - Number of detected stars
-%                .rBody         - 3xM unit vectors in body frame
-%                .rECI_ref      - 3xM reference unit vectors in ECI frame
-%                .weights        - Mx1 measurement weights (normalized)
+%                .nStars          - Number of detected stars
+%                .rBody           - 3xM unit vectors in body frame
+%                .rECI_ref        - 3xM reference unit vectors in ECI frame
+%                .weights         - Mx1 measurement weights (normalized)
 %   nSTR       - Number of active star trackers.
 %
 % Outputs:
 %   qEst      - Optimal attitude quaternion [qw; qx; qy; qz] (4x1).
 %   DCMEst    - Direction Cosine Matrix (ECI-to-Body, 3x3).
 %   triadInfo - Structure with diagnostic information:
-%                .nObs          - Total number of observations
-%                .lossWahba     - Wahba loss function value
-%                .residuals      - Nx1 angular residuals [rad]
-%                .status         - String indicating solution quality
-%                .vector1_weight - Weight of primary observation
-%                .vector2_weight - Weight of secondary observation
+%                .nObs            - Total number of observations
+%                .lossWahba       - Wahba loss function value
+%                .residuals       - Nx1 angular residuals [rad]
+%                .status          - String indicating solution quality
+%                .weightPrimary   - Weight of primary observation
+%                .weightSecondary - Weight of secondary observation
 %
 % Method:
 %   1. Select two highest-weighted observations (primary and secondary).

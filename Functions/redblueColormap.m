@@ -1,7 +1,7 @@
 function cmap = redblueColormap(n)
 %==========================================================================
-% redblue: Generate diverging red-blue colormap for visualizing positive
-%          and negative data (e.g., errors, deviations from zero).
+% redblueColormap: Generate diverging red-blue colormap for visualizing positive
+%                  and negative data (e.g., errors, deviations from zero).
 %
 % Inputs:
 %   n  - (Optional) Number of colormap levels (default: 256).

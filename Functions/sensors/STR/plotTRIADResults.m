@@ -42,7 +42,7 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
     
     % Create Figures directory if saving is requested
     if saveFlag
-        figDir = fullfile(pwd, 'Figures', 'STR', 'QUEST');
+        figDir = fullfile(pwd, 'Figures', 'STR', 'TRIAD');
         if ~exist(figDir, 'dir')
             mkdir(figDir);
             fprintf('\n✓ Created directory: %s/\n', figDir);
