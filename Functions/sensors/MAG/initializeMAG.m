@@ -2,7 +2,7 @@ function MAG = initializeMAG()
 %==========================================================================
 % initializeMAG - Initialize magnetometer hardware parameters and error models
 %
-% OUTPUTS:
+% Outputs:
 %   MAG - Structure with fields:
 %         .rate, .dt              - Sampling configuration
 %         .range, .resolution     - ADC specifications
@@ -14,8 +14,6 @@ function MAG = initializeMAG()
 %         .biasTau                - Bias correlation time [s]
 %==========================================================================
 
-    fprintf('\n=== Initializing MAG Model ===\n');
-    
     % --- General Configuration ---
     MAG.rate = 10;           % Sampling frequency [Hz]
     MAG.dt   = 1 / MAG.rate; % Sampling time step [s]
