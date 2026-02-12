@@ -47,7 +47,7 @@ function catalog = loadHipparcosStellarCatalog(magnitudeLimit, reloadFlag)
 
     % Attempt to load pre-filtered catalog from cache
     if exist(mat_file, 'file') && ~reloadFlag
-        fprintf('=== Loading cached Hipparcos catalog ===\n');
+        fprintf('\n=== Loading cached Hipparcos catalog ===\n');
         fprintf('File: %s\n', mat_file);
         
         load(mat_file, 'catalog', 'nStars', 'magnitudeLimitSaved');

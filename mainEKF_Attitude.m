@@ -6,6 +6,7 @@ clear; close all; clc;
 %% ========================================================================
 % 1. HARDWARE PARAMETERS & SENSOR INITIALIZATION
 % =========================================================================
+
 fprintf('\n=== EKF Initialization ===\n');
 
 % IMU (Gyroscope + Accelerometer)
@@ -27,63 +28,67 @@ catalog = loadHipparcosStellarCatalog(STR(1).magnitudeLimit);
 fprintf('\n=== Truth Trajectory Generation ===\n');
 
 % Simulation settings
-epoch   = datetime(2026, 2, 12, 0, 0, 0, 'TimeZone', 'UTC');
-T_total = 60 * 45;              % Total simulation time [s]
-t       = 0:IMU.dt:T_total;     % Time vector at IMU rate [s]
+epoch   = datetime(2026,2,12,0,0,0,'TimeZone','UTC'); % Start date
+T_total = 60 * 45;                                    % Total simulation time [s]
+t       = 0:IMU.dt:T_total;                           % Time vector at IMU rate [s]
 N       = numel(t);
 
 fprintf(' Simulation duration: %.1f min (%d samples at %.0f Hz)\n', ...
         T_total/60, N, IMU.rate);
 
-% Spacecraft physical parameters
-scParams.mass     = 100.0;      % [kg]
-scParams.areaDrag = 1.0;        % [m²]
-scParams.areaSRP  = 1.2;        % [m²]
-scParams.Cd       = 2.0;        % Drag coefficient [-]
-scParams.Cr       = 1.5;        % SRP coefficient [-]
+% Spacecraft Parameters
+scParams.mass     = 100.0; % [kg]
+scParams.areaDrag = 1.0;   % [m²]
+scParams.areaSRP  = 1.2;   % [m²]
+scParams.Cd       = 2.0;   %  [-] Drag Coeff
+scParams.Cr       = 1.5;   %  [-]  SRP Coeff (1 = Absorption, 2 = Reflection)
 
 % Orbital elements (randomized LEO)
-orbitalElems.SMA   = 6378e3 + 200e3 + 400e3 * rand();  % [m]
-orbitalElems.ECC   = 0.01 * rand();                     % [-]
-orbitalElems.INC   = 180 * rand();                      % [deg]
-orbitalElems.RAAN  = 360 * rand();                      % [deg]
-orbitalElems.AOP   = 360 * rand();                      % [deg]
-orbitalElems.TA    = 360 * rand();                      % [deg]
+orbitalElems.SMA   = 6378e3 + 200e3 + 400e3 * rand(); % [m]
+orbitalElems.ECC   =                  0.01 * rand();  % [-]
+orbitalElems.INC   =                   180 * rand();  % [deg]
+orbitalElems.RAAN  =                   360 * rand();  % [deg]
+orbitalElems.AOP   =                   360 * rand();  % [deg]
+orbitalElems.TA    =                   360 * rand();  % [deg]
 orbitalElems.epoch = epoch;
 
 % Attitude parameters (Nadir Pointing with realistic perturbations)
-attParams.I      = diag([10, 15, 8]);  % Inertia tensor [kg·m²]
-attParams.dipole = [0; 0; 0.1];        % Magnetic dipole [A·m²]
-attParams.Kp     = 0.5;                % Proportional gain [N·m]
-attParams.Kd     = 2.0;                % Derivative gain [N·m·s]
-attParams.mode   = 'LVLH';             % Nadir pointing mode
+attParams.I      = diag( (5 + 45*rand()) * ones(1, 3) ); % Inertia tensor [kg·m²]
+attParams.dipole =  [-0.1 +  0.2*rand(); 
+                     -0.1 +  0.2*rand(); 
+                     0.05 + 0.25*rand()];                % Magnetic dipole [A·m²]
+attParams.Kp     =   0.1 +   1.9*rand();                 % Proportional gain [N·m]
+attParams.Ki     = 0.001 + 0.099*rand();                 % Integral gain [N·m/s]
+attParams.Kd     =   0.5 +   4.5*rand();                 % Derivative gain [N·m·s]
+attParams.mode   = 'LVLH';                               % Nadir pointing mode
 
 % Generate complete truth trajectory
-truth = generateTruthTrajectory(t, epoch, orbitalElems, scParams, attParams);
+groundTruth = generateTruthTrajectory(t, epoch, orbitalElems, scParams, attParams);
 
 % Extract truth variables for convenience
-qTrue       = truth.qTrue;        % Attitude quaternion (ECI to Body), 4xN
-omegaTrue   = truth.omegaTrue;    % Angular velocity (body frame) [rad/s], 3xN
-rECI        = truth.rECI;         % Position in ECI [m], 3xN
-vECI        = truth.vECI;         % Velocity in ECI [m/s], 3xN
-B_ECI       = truth.B_ECI;        % Magnetic field in ECI [nT], 3xN
+qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body), 4xN
+omegaTrue   = groundTruth.omegaTrue; % Angular velocity (body frame) [rad/s], 3xN
+rECI        = groundTruth.rECI;      % Position in ECI [m], 3xN
+vECI        = groundTruth.vECI;      % Velocity in ECI [m/s], 3xN
+B_ECI       = groundTruth.B_ECI;     % Magnetic field in ECI [nT], 3xN
 
-% Rotate magnetic field to body frame for MAG sensor
+% Rotate magnetic field to body frame for MAG
 BTrue_body = zeros(3,N);
 for k = 1:N
-    DCM_ECI2B      = quat2dcm(qTrue(:,k));
+    DCM_ECI2B       = quat2dcm(qTrue(:,k));
     BTrue_body(:,k) = DCM_ECI2B * B_ECI(:,k);
 end
 
-% Compute specific force for accelerometer (gravity + perturbations)
-g0             = 9.80665;  % [m/s²]
-forceTrue_body = repmat([0; 0; -g0], 1, N);  % Simplified: constant gravity
+% Compute specific force for accelerometer
+g0             = 9.80665;                   % [m/s²]
+forceTrue_body = repmat([0; 0; -g0], 1, N); % [m/s²]
 
 fprintf('=== Truth Generation Complete ===\n');
 
 %% ========================================================================
-% 3. SENSOR MEASUREMENTS GENERATION (Corrupted with Realistic Errors)
+% 3. SENSOR MEASUREMENTS GENERATION
 % =========================================================================
+
 fprintf('\n=== Generating Sensor Measurements ===\n');
 
 % IMU Measurements (Gyro + Accel at 120 Hz)
@@ -102,11 +107,11 @@ strMeas = cell(1,N);
 for k = 1:N
     % STR operates at its own rate
     if mod(k-1, round(IMU.rate/STR(1).rate)) == 0
-        DCMTrue_k  = quat2dcm(qTrue(:,k));
+        DCMTrue_k   = quat2dcm(qTrue(:,k));
         omegaBody_k = omegaTrue(:,k);
-        strMeas{k} = generateSTRMeasurements(STR, nSTR, catalog, DCMTrue_k, omegaBody_k);
+        strMeas{k}  = generateSTRMeasurements(STR, nSTR, catalog, DCMTrue_k, omegaBody_k);
     else
-        strMeas{k} = [];  % No measurement at this time step
+        strMeas{k} = []; % No measurement at this time step
     end
 end
 fprintf('Done.\n');
@@ -116,65 +121,68 @@ fprintf('=== Sensor Data Generation Complete ===\n');
 %% ========================================================================
 % 4. INITIALIZE MEKF
 % =========================================================================
-ekf = initializeMEKF(IMU, MAG, STR);
 
-% Initialize with first TRIAD solution (if STR data available)
+EKF = initializeEKF_Att(IMU, MAG, STR);
+
+% Initialize with first QUEST solution (if STR data available)
 if ~isempty(strMeas{1})
-    fprintf('\n Initializing attitude with TRIAD solution ... ');
+    fprintf('\n Initializing attitude with QUEST solution ... ');
     [qInit, ~, ~] = solveQUESTAttitude(strMeas{1}, nSTR);
-    ekf.q_nom = qInit;
+    EKF.qNom      = qInit;
     fprintf('Done.\n');
 else
-    fprintf('\n WARNING: No STR data at t=0, using identity quaternion.\n');
+    fprintf('\n WARNING: No STR data at t = 0, using identity quaternion.\n');
 end
 
 %% ========================================================================
-% 5. MEKF PROPAGATION AND UPDATE LOOP
+% 5. EKF PROPAGATION AND UPDATE LOOP
 % =========================================================================
-fprintf('\n=== Running MEKF ===\n');
+
+fprintf('\n=== Running EKF ===\n');
 
 % Pre-allocate history
-qEst     = zeros(4,N);
-biasEst  = zeros(3,N);
-P_hist   = zeros(6,6,N);
+qEst         = zeros(4,N);
+biasEst      = zeros(3,N);
+PHist        = zeros(6,6,N);
 
-qEst(:,1)    = ekf.q_nom;
-biasEst(:,1) = ekf.x(4:6);
-P_hist(:,:,1) = ekf.P;
+qEst(:,1)    = EKF.qNom;
+biasEst(:,1) = EKF.x(4:6);
+PHist(:,:,1) = EKF.P;
 
 for k = 2:N
-    %% PREDICTION STEP (Gyro propagation at IMU rate)
-    ekf = predictMEKF(ekf, imuMeas.gyro.omegaBody(:,k), IMU.dt);
+    % 1) Prediction Step (Gyro propagation at IMU rate)
+    EKF = predictEKF_Att(EKF, imuMeas.gyro.omegaBody(:,k), IMU.dt);
     
-    %% CORRECTION STEP (Sensor updates at their respective rates)
+    % 2) Correction Step (Sensor updates at their respective rates)
+        % Magnetometer Update (10 Hz)
+        if mod(k - 1, round(IMU.rate/MAG.rate)) == 0
+            EKF = updateMAG(EKF, magMeas.B(:,k), B_ECI(:,k));
+        end
+        
+        % Star Tracker Update (4 Hz, when available)
+        if ~isempty(strMeas{k})
+            EKF = updateSTR(EKF, strMeas{k}, nSTR);
+        end
     
-    % Magnetometer Update (10 Hz)
-    if mod(k-1, round(IMU.rate/MAG.rate)) == 0
-        ekf = updateMAG(ekf, magMeas.B(:,k), B_ECI(:,k));
-    end
+    % 3) Store input
+    qEst(:,k)    = EKF.qNom;
+    biasEst(:,k) = EKF.x(4:6);
+    PHist(:,:,k) = EKF.P;
     
-    % Star Tracker Update (4 Hz, when available)
-    if ~isempty(strMeas{k})
-        ekf = updateSTR(ekf, strMeas{k}, nSTR);
-    end
-    
-    %% STORE HISTORY
-    qEst(:,k)      = ekf.q_nom;
-    biasEst(:,k)   = ekf.x(4:6);
-    P_hist(:,:,k)  = ekf.P;
-    
-    % Progress indicator
+    % 4) Progress indicator
     if mod(k, round(N/10)) == 0
         fprintf(' Progress: %.0f%%\n', 100*k/N);
     end
 end
 
-fprintf('=== MEKF Propagation Complete ===\n');
+fprintf('=== EKF Propagation Complete ===\n');
 
 %% ========================================================================
 % 6. ERROR ANALYSIS AND VISUALIZATION
 % =========================================================================
+
+% Generate comprehensive validation plots
 saveFlag = 1;
-plotEKFResults(t, truth, qEst, biasEst, P_hist, imuMeas, saveFlag);
+plotEKF_AttResults(t, groundTruth, qEst, biasEst, PHist, imuMeas, saveFlag);
 
 fprintf('\n=== All tasks completed successfully ===\n');

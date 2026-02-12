@@ -2,10 +2,10 @@ function STR = initializeSTR(nSTR)
 %==========================================================================
 % initializeSTR - Initialize Star Tracker hardware parameters
 %
-% INPUTS:
+% Inputs:
 %   nSTR - Number of star trackers (1 or 2)
 %
-% OUTPUTS:
+% Outputs:
 %   STR - Array of structures (1xnSTR) with fields:
 %         .FOV                        - Field of view [deg]
 %         .resolution                 - Sensor resolution [pixels]

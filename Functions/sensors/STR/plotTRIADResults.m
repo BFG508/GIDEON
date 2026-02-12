@@ -24,7 +24,7 @@ function fig = plotTRIADResults(meas, nSTR, STR, DCMTrue, DCMEst, qTrue, qEst, t
 %   3. DCM error heatmap               - element-wise comparison
 %   4. Quaternion comparison           - component-wise bar chart
 %   5. Residuals vs. magnitude scatter - brightness correlation
-%   6. TRIAD vector selection           - primary/secondary vectors and geometry
+%   6. TRIAD vector selection          - primary/secondary vectors and geometry
 %==========================================================================
 
     % Handle optional saveFlag input (default: false)

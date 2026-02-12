@@ -2,7 +2,7 @@ function IMU = initializeIMU()
 %==========================================================================
 % initializeIMU - Initialize IMU hardware parameters and error models
 %
-% OUTPUTS:
+% Outputs:
 %   IMU - Structure with fields:
 %         .rate, .dt              - Sampling configuration
 %         .DCM_mounting           - Body to IMU mounting misalignment
@@ -10,8 +10,6 @@ function IMU = initializeIMU()
 %         .accel                  - Accelerometer parameters and error matrices
 %==========================================================================
 
-    fprintf('\n=== Initializing IMU Model ===\n');
-    
     % --- General Configuration ---
     IMU.rate = 120;        % Sampling frequency [Hz]
     IMU.dt   = 1/IMU.rate; % Sampling time step [s]

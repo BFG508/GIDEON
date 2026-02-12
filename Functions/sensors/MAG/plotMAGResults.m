@@ -1,6 +1,7 @@
 function fig = plotMAGResults(t, BTrue_body, meas, MAG, saveFlag)
 %==========================================================================
 % plotMAGResults: Generate quicklook figures for MAG truth vs measurements.
+%
 % Inputs:
 %   t             - Time vector                       [s], 1xN or Nx1
 %   BTrue_body    - True magnetic field in body frame [nT], 3xN

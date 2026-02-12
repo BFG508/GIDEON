@@ -1,19 +1,16 @@
 function Om = skewMatrix(omegaBody)
 %==========================================================================
-% skewMatrix - Construct Omega matrix for quaternion kinematics
+% skewMatrix: Constructs the skew-symmetric Omega matrix used in the quaternion 
+%             differential equation for attitude propagation. This version assumes
+%             a scalar-first quaternion convention: q = [qw; qx; qy; qz].
 %
-% DESCRIPTION:
-%   Constructs the skew-symmetric Omega matrix used in the quaternion 
-%   differential equation for attitude propagation. This version assumes
-%   a scalar-first quaternion convention: q = [qw; qx; qy; qz].
-%
-% INPUTS:
+% Inputs:
 %   omegaBody - Angular velocity vector in BODY frame [rad/s], 3x1
 %
-% OUTPUTS:
+% Outputs:
 %   Om        - Omega matrix [4x4] for quaternion kinematics
 %
-% KINEMATICS EQUATION:
+% Method:
 %   The quaternion time derivative is given by:
 %     qDot = 1/2 * Omega(omega_b) * q
 %

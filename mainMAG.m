@@ -82,7 +82,7 @@ MAG = initializeMAG();
 
 % Simulation time settings
 epoch = datetime(2026,2,10,0,0,0,'TimeZone','UTC'); % Start date
-T_total = 60*45;                                    % Total simulation time [s]
+T_total = 60 * 45;                                  % Total simulation time [s]
 t = 0:MAG.dt:T_total;                               % Time vector [s]
 N = numel(t);
 
@@ -92,20 +92,20 @@ fprintf(' Simulation time: %.1f s (%d samples)\n', T_total, N);
 % --- True Orbital Position (ECI frame) ---
 fprintf(' Propagating orbit (J2 + Drag + SRP) ... \n');
 
-    % Spacecraft Parameters
+    % Spacecraft parameters
     scParams.mass     = 100.0; % [kg]
     scParams.areaDrag = 1.0;   % [m²]
     scParams.areaSRP  = 1.2;   % [m²]
     scParams.Cd       = 2.0;   %  [-] Drag Coeff
     scParams.Cr       = 1.5;   %  [-]  SRP Coeff (1 = Absorption, 2 = Reflection)
     
-    % Orbital Elements
-    orbitalElems.SMA   = 6378e3 + 200e3 + 400e3 * rand();
-    orbitalElems.ECC   =                  0.01 * rand();
-    orbitalElems.INC   =                   180 * rand();
-    orbitalElems.RAAN  =                   360 * rand();
-    orbitalElems.AOP   =                   360 * rand();
-    orbitalElems.TA    =                   360 * rand();
+    % Orbital elements (randomized LEO)
+    orbitalElems.SMA   = 6378e3 + 200e3 + 400e3 * rand(); % [m]
+    orbitalElems.ECC   =                  0.01 * rand();  % [-]
+    orbitalElems.INC   =                   180 * rand();  % [deg]
+    orbitalElems.RAAN  =                   360 * rand();  % [deg]
+    orbitalElems.AOP   =                   360 * rand();  % [deg]
+    orbitalElems.TA    =                   360 * rand();  % [deg]
     orbitalElems.epoch = epoch;
     
     [rECI, ~] = simulateOrbit(t, orbitalElems, scParams);
