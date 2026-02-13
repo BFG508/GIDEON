@@ -1,4 +1,4 @@
-function truth = generateTruthTrajectory(t, epoch, orbitalElements, scParams, attParams)
+function truth = generateGroundTruth(t, epoch, orbitalElements, scParams, attParams)
 %==========================================================================
 % generateTruthTrajectory - Generate realistic spacecraft trajectory with
 %                           attitude dynamics and environmental perturbations
@@ -50,22 +50,11 @@ function truth = generateTruthTrajectory(t, epoch, orbitalElements, scParams, at
     
     % Downsampled time vector
     t_dcm = t(1:downsample_factor:end);
-    N_dcm = length(t_dcm);
-    
-    fprintf('   Original samples: %d at %.2f Hz\n', N, 1/dt_original);
-    fprintf('   DCM samples:      %d at %.2f Hz (downsample factor: %d)\n', ...
-            N_dcm, 1/dt_dcm, downsample_factor);
     
     % Compute DCM_ECI2ECEF at downsampled rate
-    fprintf('   Computing ECI→ECEF transformation ... ');
-    tic;
     DCM_ECI2ECEF_downsampled = dcmeci2ecef('IAU-2000/2006', epoch + seconds(t_dcm'));
-    t_dcm_calc = toc;
-    fprintf('Done (%.2f s)\n', t_dcm_calc);
     
     % Interpolate DCM to original time vector
-    fprintf('   Interpolating DCM to full time vector ... ');
-    tic;
     DCM_ECI2ECEF = zeros(3, 3, N);
     
     for i = 1:3
@@ -77,24 +66,18 @@ function truth = generateTruthTrajectory(t, epoch, orbitalElements, scParams, at
             DCM_ECI2ECEF(i,j,:) = interp1(t_dcm, dcm_ij, t, 'linear', 'extrap');
         end
     end
-    t_interp = toc;
-    fprintf('Done (%.2f s)\n', t_interp);
     
     % Convert ECI positions to ECEF using interpolated DCM
-    fprintf('   Transforming positions ECI→ECEF ... ');
     rECEF = zeros(3, N);
     for k = 1:N
         rECEF(:,k) = squeeze(DCM_ECI2ECEF(:,:,k)) * rECI(:,k);
     end
-    fprintf('Done.\n');
     
     % Convert ECEF to LLA (Latitude, Longitude, Altitude)
-    fprintf('   Converting ECEF→LLA ... ');
     LLA = ecef2lla(rECEF', 'WGS84');
     lat = LLA(:,1)';  % [deg]
     lon = LLA(:,2)';  % [deg]
     alt = LLA(:,3)';  % [m]
-    fprintf('Done.\n');
     
     % Compute Magnetic Field using IGRF-13
     fprintf('   Evaluating IGRF-13 model ... ');
@@ -102,7 +85,6 @@ function truth = generateTruthTrajectory(t, epoch, orbitalElements, scParams, at
     fprintf('Done.\n');
     
     % Convert NED → ECEF → ECI
-    fprintf('   Transforming magnetic field NED→ECEF→ECI ... ');
     [B_ECEFx, B_ECEFy, B_ECEFz] = ned2ecefv(XYZ_NED(:,1), XYZ_NED(:,2), XYZ_NED(:,3), ...
                                             lat(:), lon(:));
     B_ECEF = [B_ECEFx'; B_ECEFy'; B_ECEFz'];
@@ -123,7 +105,7 @@ function truth = generateTruthTrajectory(t, epoch, orbitalElements, scParams, at
     fprintf(' Computing Sun ephemeris ... ');
     sunPos_ECI = zeros(3,N);
     for k = 1:N
-        sunPos_ECI(:,k) = computeSunPosition(epoch + seconds(t(k)));
+        sunPos_ECI(:,k) = sunPosition(epoch + seconds(t(k)));
     end
     fprintf('Done.\n');
     
@@ -347,41 +329,6 @@ function DCM_ECI2LVLH = computeLVLH_DCM(r, v)
     x_LVLH = cross(y_LVLH, z_LVLH);  % Ram direction
     
     DCM_ECI2LVLH = [x_LVLH'; y_LVLH'; z_LVLH'];
-end
-
-%% =======================================================================
-% HELPER FUNCTION: Sun Position (simplified)
-% ========================================================================
-function sunPos = computeSunPosition(epoch_datetime)
-    % Simplified Sun position (low-fidelity, adequate for torque estimation)
-    JD = juliandate(epoch_datetime);
-    T  = (JD - 2451545.0) / 36525;  % Julian centuries since J2000
-    
-    % Mean longitude
-    L = 280.460 + 36000.771*T;
-    L = mod(L, 360);
-    
-    % Mean anomaly
-    g = 357.528 + 35999.050*T;
-    g = mod(g, 360);
-    g_rad = deg2rad(g);
-    
-    % Ecliptic longitude
-    lambda = L + 1.915*sin(g_rad) + 0.020*sin(2*g_rad);
-    lambda_rad = deg2rad(lambda);
-    
-    % Obliquity of ecliptic
-    epsilon = 23.439 - 0.013*T;
-    epsilon_rad = deg2rad(epsilon);
-    
-    % Distance (AU)
-    r_AU = 1.00014 - 0.01671*cos(g_rad) - 0.00014*cos(2*g_rad);
-    r_m  = r_AU * 1.496e11;  % Convert to meters
-    
-    % Sun position in ECI
-    sunPos = r_m * [cos(lambda_rad);
-                    cos(epsilon_rad)*sin(lambda_rad);
-                    sin(epsilon_rad)*sin(lambda_rad)];
 end
 
 %% =======================================================================

@@ -19,27 +19,27 @@ function q = dcm2quat(DCM)
         % qw is largest
         s = sqrt(1 + traceDCM) * 2;
         qw = 0.25 * s;
-        qx = (DCM(3,2) - DCM(2,3)) / s;
-        qy = (DCM(1,3) - DCM(3,1)) / s;
-        qz = (DCM(2,1) - DCM(1,2)) / s;
+        qx = (DCM(2,3) - DCM(3,2)) / s;
+        qy = (DCM(3,1) - DCM(1,3)) / s;
+        qz = (DCM(1,2) - DCM(2,1)) / s;
     elseif (DCM(1,1) > DCM(2,2)) && (DCM(1,1) > DCM(3,3))
         % qx is largest
         s = sqrt(1 + DCM(1,1) - DCM(2,2) - DCM(3,3)) * 2;
-        qw = (DCM(3,2) - DCM(2,3)) / s;
+        qw = (DCM(2,3) - DCM(3,2)) / s;
         qx = 0.25 * s;
         qy = (DCM(1,2) + DCM(2,1)) / s;
         qz = (DCM(1,3) + DCM(3,1)) / s;
     elseif (DCM(2,2) > DCM(3,3))
         % qy is largest
         s = sqrt(1 + DCM(2,2) - DCM(1,1) - DCM(3,3)) * 2;
-        qw = (DCM(1,3) - DCM(3,1)) / s;
+        qw = (DCM(3,1) - DCM(1,3)) / s;
         qx = (DCM(1,2) + DCM(2,1)) / s;
         qy = 0.25 * s;
         qz = (DCM(2,3) + DCM(3,2)) / s;
     else
         % qz is largest
         s = sqrt(1 + DCM(3,3) - DCM(1,1) - DCM(2,2)) * 2;
-        qw = (DCM(2,1) - DCM(1,2)) / s;
+        qw = (DCM(1,2) - DCM(2,1)) / s;
         qx = (DCM(1,3) + DCM(3,1)) / s;
         qy = (DCM(2,3) + DCM(3,2)) / s;
         qz = 0.25 * s;

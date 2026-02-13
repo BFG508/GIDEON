@@ -134,7 +134,7 @@ fprintf('\n=== Attitude Error Analysis ===\n');
 
 % Quaternion Error
 qErr     = quatmultiply(qEst, quatinv(qTrue));
-angleErr = rad2deg(2 * acos(min(abs(qErr(1)), 1))) * 3600;  % Scalar-first: q(1)
+angleErr = rad2deg(2 * acos(min(abs(qErr(1)), 1))) * 3600; % Scalar-first: q(1)
 
 fprintf('\nQuaternion Comparison:\n');
 fprintf('  qTrue: [%.6f, %.6f, %.6f, %.6f]\n', qTrue);

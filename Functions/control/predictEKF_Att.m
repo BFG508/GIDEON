@@ -25,7 +25,5 @@ function EKF = predictEKF_Att(EKF, omegaMeas, dt)
     % --- 2. Propagate error covariance: P = Φ*P*Φ' + Q ---
     Phi   = computeSTM(omegaCorrected, dt);
     EKF.P = Phi * EKF.P * Phi' + EKF.Q * dt;
-    
-    % --- 3. Reset error state (EKF Property) ---
-    EKF.x = zeros(6,1);
+    EKF.P = (EKF.P + EKF.P') / 2;
 end

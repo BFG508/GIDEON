@@ -31,8 +31,8 @@ function Phi = computeSTM(omega, dt)
                  -omega(2),  omega(1),        0];
     
     % --- 2. Continuous-Time System Matrix F ---
-    F = [-omegaSkew,     -eye(3);
-         zeros(3,3),  zeros(3,3)];
+    F = [-omegaSkew,    -eye(3);
+         zeros(3,3), zeros(3,3)];
     
     % --- 3. First-Order Discrete Approximation ---
     Phi = eye(6) + F * dt;

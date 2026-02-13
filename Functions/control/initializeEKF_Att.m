@@ -66,18 +66,18 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     % 4. PROCESS NOISE COVARIANCE (from Allan Deviation analysis)
     % ====================================================================
 
-    EKF.Q = computeIMUNoise(IMU);
+    EKF.Q = computeIMUNoise(IMU) * 10^2;
     
     fprintf(' Process noise (Q):\n');
-    fprintf('   - ARW noise (gyro):      %.2e (rad/s)²/s\n', EKF.Q(1,1));
-    fprintf('   - RRW noise (bias drift):%.2e (rad/s)²/s\n', EKF.Q(4,4));
+    fprintf('   - ARW noise (gyro):       %.2e (rad/s)²/s\n', EKF.Q(1,1));
+    fprintf('   - RRW noise (bias drift): %.2e (rad/s)²/s\n', EKF.Q(4,4));
     
     %% ===================================================================
     % 5. MEASUREMENT NOISE COVARIANCES
     % ====================================================================
 
     % Magnetometer noise
-    EKF.R_MAG = computeMAGNoise(MAG);
+    EKF.R_MAG = computeMAGNoise(MAG) + (MAG.hardIronLim)^2 * eye(3);
     fprintf(' Magnetometer noise (R):  %.2f nT (1σ per axis)\n', ...
             sqrt(EKF.R_MAG(1,1)));
     

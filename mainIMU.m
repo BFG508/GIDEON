@@ -79,7 +79,7 @@ IMU = initializeIMU();
 % =========================================================================
 
 % Simulation time settings
-T_total = 60*45;      % Total simulation time [s]
+T_total = 60 * 45;    % Total simulation time [s]
 t = 0:IMU.dt:T_total; % Time vector [s]
 N = numel(t);
 

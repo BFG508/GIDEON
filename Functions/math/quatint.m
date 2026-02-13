@@ -32,7 +32,7 @@ function qNew = quatint(q, omega, dt)
     % --- 3. Compute Delta Quaternion ---
     if theta < threshold
         % Small-angle approximation to avoid division by zero
-        deltaQ = [1; 0.5 * dt * omega];
+        deltaQ = [1; 1/2 * dt * omega];
     else
         % Exact exponential map
         halfTheta = theta / 2;
@@ -43,7 +43,7 @@ function qNew = quatint(q, omega, dt)
     end
     
     % --- 4. Apply rtation and normalize ---
-    qNew = quatmultiply(deltaQ, q);
+    qNew = quatmultiply(q, deltaQ);
     qNew = qNew / norm(qNew);
 
 end
