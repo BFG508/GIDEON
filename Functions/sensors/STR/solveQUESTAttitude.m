@@ -115,6 +115,7 @@ function [qEst, DCMEst, questInfo] = solveQUESTAttitude(meas, nSTR)
     fprintf('  Quaternion (est):   [%.6f, %.6f, %.6f, %.6f]\n', qEst);
     
     % Convert quaternion to DCM
+    qEst(2:4) = -qEst(2:4);
     DCMEst = quat2dcm(qEst);
     
     % Compute Wahba loss function and residuals

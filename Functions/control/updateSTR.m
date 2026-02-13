@@ -5,25 +5,23 @@ function EKF = updateSTR(EKF, strMeas, nSTR)
 %            and performs batch Kalman update using cross-product residuals.
 %
 % INPUTS:
-%    EKF     - EKF structure with fields:
-%        .qNom  - Nominal attitude quaternion (4x1), ECI to Body
-%        .x     - Error state vector (6x1): [deltaTheta; biasGyro]
-%        .P     - Error state covariance matrix (6x6)
-%        .R_str - Star Tracker measurement noise covariance (3x3) [rad²]
-%
-%    strMeas - Cell array of STR measurements (1 x nSTR)
-%              Each cell contains struct with fields:
+%    EKF         - EKF structure with fields:
+%        .qNom   - Nominal attitude quaternion (4x1), ECI to Body
+%        .x      - Error state vector (6x1): [deltaTheta; biasGyro]
+%        .P      - Error state covariance matrix (6x6)
+%        .R_str  - Star Tracker measurement noise covariance (3x3) [rad²]
+%    strMeas     - Cell array of STR measurements (1 x nSTR)
+%                  Each cell contains struct with fields:
 %        .nStars - Array of matched star pairs with:
-%            .catVec - Catalog direction in ECI frame (3x1, unit vector)
-%            .bVec   - Measured direction in body frame (3x1, unit vector)
-%
-%    nSTR    - Number of star tracker units
+%        .catVec - Catalog direction in ECI frame (3x1, unit vector)
+%        .bVec   - Measured direction in body frame (3x1, unit vector)
+%    nSTR        - Number of star tracker units
 %
 % OUTPUTS:
-%    EKF     - Updated EKF structure with corrected:
-%        .qNom - Nominal quaternion after attitude correction
-%        .x    - Error state (attitude error reset to zero)
-%        .P    - Updated error covariance
+%    EKF         - Updated EKF structure with corrected:
+%        .qNom   - Nominal quaternion after attitude correction
+%        .x      - Error state (attitude error reset to zero)
+%        .P      - Updated error covariance
 %
 % METHOD:
 %    1. Collect all valid star measurements from all STR units
@@ -36,38 +34,46 @@ function EKF = updateSTR(EKF, strMeas, nSTR)
 % REFERENCE:
 %    Markley & Crassidis, "Fundamentals of Spacecraft Attitude 
 %    Determination and Control", Section 7.6
-%
 %==========================================================================
 
     % --- 1. Collect All Valid Star Measurements ---
-    allStarsCell = cell(nSTR, 1);
-    totalStars   = 0;
+    allCatVecs = [];
+    allBVecs   = [];
     
     for iSTR = 1:nSTR
-        if ~isempty(strMeas(iSTR)) && isfield(strMeas(iSTR), 'nStars')
-            allStarsCell{iSTR} = strMeas(iSTR).nStars;
-            totalStars = totalStars + length(strMeas(iSTR).nStars);
+        % Extract structure depending on whether it's a cell or an array
+        if iscell(strMeas)
+            iMeas = strMeas{iSTR};
+        else
+            iMeas = strMeas(iSTR);
+        end
+        
+        % Check if data exists and at least 1 star was detected
+        if ~isempty(iMeas) && isfield(iMeas, 'nStars') && iMeas.nStars > 0
+            % Stack the 3xN catalog and body matrices horizontally
+            allCatVecs = [allCatVecs, iMeas.rECI_ref]; % Inertial catalog vectors
+            allBVecs   = [  allBVecs,    iMeas.rBody]; % Sensor/Body measured vectors
         end
     end
     
-    if totalStars < 3
+    % Count total collected stars (number of columns)
+    nStars = size(allCatVecs, 2);
+    
+    % At least 2 stars (4 equations) are required for an attitude update
+    if nStars < 2
         return;
     end
-    
-    % Concatenate all stars
-    allStars = vertcat(allStarsCell{:});
-    nStars   = length(allStars);
     
     % --- 2. Build Stacked Measurement Vectors ---
     nMeas   = nStars * 2;
     yStack  = zeros(nMeas, 1);
-    HStack  = zeros(nMeas, 6);
+    H_Stack = zeros(nMeas, 6);
     DCM_nom = quat2dcm(EKF.qNom);
     
     for i = 1:nStars
-        % Catalog and measured star directions
-        sCat  = allStars(i).catVec;
-        sMeas = allStars(i).bVec;
+        % Extract current star directions (3x1 vectors)
+        sCat  = allCatVecs(:, i);
+        sMeas = allBVecs(:, i);
         
         % Predicted measurement
         sPred = DCM_nom * sCat;
@@ -79,31 +85,30 @@ function EKF = updateSTR(EKF, strMeas, nSTR)
         [y2D, T] = projectToTangPlane(yFull, sPred);
         
         % Measurement Jacobian
-        H3D = computeMeasJacobian_Att(sPred);
-        H2D = [T * H3D(:,1:3), zeros(2,3)];
+        H2D = [T, zeros(2,3)];
         
         % Stack measurements
-        idx = (i-1)*2 + (1:2);
-        yStack(idx)   = y2D;
-        HStack(idx,:) = H2D;
+        idx            = (i - 1)*2 + (1:2);
+        yStack(idx)    = y2D;
+        H_Stack(idx,:) = H2D;
     end
     
     % --- 3. Build Stacked Measurement Noise Covariance ---
-    RStack = kron(eye(nStars), EKF.R_str(1:2,1:2));
+    R_Stack = kron(eye(nStars), EKF.R_STR(1:2,1:2));
     
     % --- 4. Kalman Gain and State Update ---
-    S     = HStack * EKF.P * HStack' + RStack;
-    K     = EKF.P * HStack' / S;
+    S     = H_Stack * EKF.P * H_Stack' + R_Stack;
+    K     = EKF.P * H_Stack' / S;
     EKF.x = EKF.x + K * yStack;
     
     % --- 5. Update Covariance (Joseph Form) ---
     I     = eye(6);
-    IKH   = I - K * HStack;
-    EKF.P = IKH * EKF.P * IKH' + K * RStack * K';
+    IKH   = I - K * H_Stack;
+    EKF.P = IKH * EKF.P * IKH' + K * R_Stack * K';
     
     % --- 6. Apply Correction to Nominal Quaternion ---
     deltaQ   = smallAng2quat(EKF.x(1:3));
-    EKF.qNom = quatmultiply(deltaQ, EKF.qNom);
+    EKF.qNom = quatmultiply(EKF.qNom, deltaQ);
     EKF.qNom = EKF.qNom / norm(EKF.qNom);
     
     % --- 7. Reset Attitude Error (MEKF Property) ---

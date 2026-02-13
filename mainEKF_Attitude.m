@@ -28,7 +28,7 @@ catalog = loadHipparcosStellarCatalog(STR(1).magnitudeLimit);
 fprintf('\n=== Truth Trajectory Generation ===\n');
 
 % Simulation settings
-epoch   = datetime(2026,2,12,0,0,0,'TimeZone','UTC'); % Start date
+epoch   = datetime(2026,2,13,0,0,0,'TimeZone','UTC'); % Start date
 T_total = 60 * 45;                                    % Total simulation time [s]
 t       = 0:IMU.dt:T_total;                           % Time vector at IMU rate [s]
 N       = numel(t);
@@ -45,15 +45,17 @@ scParams.Cr       = 1.5;   %  [-]  SRP Coeff (1 = Absorption, 2 = Reflection)
 
 % Orbital elements (randomized LEO)
 orbitalElems.SMA   = 6378e3 + 200e3 + 400e3 * rand(); % [m]
-orbitalElems.ECC   =                  0.01 * rand();  % [-]
-orbitalElems.INC   =                   180 * rand();  % [deg]
-orbitalElems.RAAN  =                   360 * rand();  % [deg]
-orbitalElems.AOP   =                   360 * rand();  % [deg]
-orbitalElems.TA    =                   360 * rand();  % [deg]
+orbitalElems.ECC   =                   0.01 * rand(); % [-]
+orbitalElems.INC   =                    180 * rand(); % [deg]
+orbitalElems.RAAN  =                    360 * rand(); % [deg]
+orbitalElems.AOP   =                    360 * rand(); % [deg]
+orbitalElems.TA    =                    360 * rand(); % [deg]
 orbitalElems.epoch = epoch;
 
 % Attitude parameters (Nadir Pointing with realistic perturbations)
-attParams.I      = diag( (5 + 45*rand()) * ones(1, 3) ); % Inertia tensor [kg·m²]
+attParams.I      = diag(5 + 45*[rand(), ...
+                                rand(), ...
+                                rand()]);                % Inertia tensor [kg·m²]
 attParams.dipole =  [-0.1 +  0.2*rand(); 
                      -0.1 +  0.2*rand(); 
                      0.05 + 0.25*rand()];                % Magnetic dipole [A·m²]
@@ -63,14 +65,14 @@ attParams.Kd     =   0.5 +   4.5*rand();                 % Derivative gain [N·m
 attParams.mode   = 'LVLH';                               % Nadir pointing mode
 
 % Generate complete truth trajectory
-groundTruth = generateTruthTrajectory(t, epoch, orbitalElems, scParams, attParams);
+groundTruth = generateGroundTruth(t, epoch, orbitalElems, scParams, attParams);
 
 % Extract truth variables for convenience
-qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body), 4xN
-omegaTrue   = groundTruth.omegaTrue; % Angular velocity (body frame) [rad/s], 3xN
-rECI        = groundTruth.rECI;      % Position in ECI [m], 3xN
-vECI        = groundTruth.vECI;      % Velocity in ECI [m/s], 3xN
-B_ECI       = groundTruth.B_ECI;     % Magnetic field in ECI [nT], 3xN
+qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body),          4xN
+omegaTrue   = groundTruth.omegaTrue; % Angular velocity (body frame)      [rad/s], 3xN
+rECI        = groundTruth.rECI;      % Position in ECI                    [m],     3xN
+vECI        = groundTruth.vECI;      % Velocity in ECI                    [m/s],   3xN
+B_ECI       = groundTruth.B_ECI;     % Magnetic field in ECI              [nT],    3xN
 
 % Rotate magnetic field to body frame for MAG
 BTrue_body = zeros(3,N);
@@ -124,14 +126,14 @@ fprintf('=== Sensor Data Generation Complete ===\n');
 
 EKF = initializeEKF_Att(IMU, MAG, STR);
 
-% Initialize with first QUEST solution (if STR data available)
+% Initialize with first TRIAD solution (if STR data available)
 if ~isempty(strMeas{1})
     fprintf('\n Initializing attitude with QUEST solution ... ');
-    [qInit, ~, ~] = solveQUESTAttitude(strMeas{1}, nSTR);
+    [qInit, ~, ~] = solveTRIADAttitude(strMeas{1}, nSTR);
     EKF.qNom      = qInit;
     fprintf('Done.\n');
 else
-    fprintf('\n WARNING: No STR data at t = 0, using identity quaternion.\n');
+    warning('No STR data at t = 0, using identity quaternion.');
 end
 
 %% ========================================================================
@@ -154,17 +156,17 @@ for k = 2:N
     EKF = predictEKF_Att(EKF, imuMeas.gyro.omegaBody(:,k), IMU.dt);
     
     % 2) Correction Step (Sensor updates at their respective rates)
-        % Magnetometer Update (10 Hz)
+        % Magnetometer update (10 Hz)
         if mod(k - 1, round(IMU.rate/MAG.rate)) == 0
             EKF = updateMAG(EKF, magMeas.B(:,k), B_ECI(:,k));
         end
-        
-        % Star Tracker Update (4 Hz, when available)
+
+        % Star Tracker update (4 Hz, when available)
         if ~isempty(strMeas{k})
             EKF = updateSTR(EKF, strMeas{k}, nSTR);
         end
     
-    % 3) Store input
+    % 3) Store history
     qEst(:,k)    = EKF.qNom;
     biasEst(:,k) = EKF.x(4:6);
     PHist(:,:,k) = EKF.P;

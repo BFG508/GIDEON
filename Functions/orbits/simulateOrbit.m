@@ -8,12 +8,12 @@ function [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams)
 % INPUTS:
 %    t               - Time vector [s] (relative to epoch, starting at 0)
 %    orbitalElements - Struct with fields:
-%        .SMA        - Semi-major axis [m]
-%        .ECC        - Eccentricity [0, 1)
-%        .INC        - Inclination [deg]
-%        .RAAN       - RAAN [deg]
-%        .AOP        - Argument of Perigee [deg]
-%        .TA         - True Anomaly at t=0 [deg]
+%        .SMA        - Semi-major axis         [m]
+%        .ECC        - Eccentricity [0, 1)     [-]
+%        .INC        - Inclination           [deg]
+%        .RAAN       - RAAN                  [deg]
+%        .AOP        - Argument of Perigee   [deg]
+%        .TA         - True Anomaly at t = 0 [deg]
 %        .epoch      - Datetime object (UTC) for Sun position calculation
 %
 %    scParams        - Struct with spacecraft physical parameters:
@@ -67,7 +67,7 @@ function [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams)
     r0 = Q * rPQW;
     v0 = Q * vPQW;
     
-    %% --- 3. Numerical Integration (ODE113) ---
+    %% --- 3. Numerical Integration (ode113) ---
     y0 = [r0; v0]; 
     opts = odeset('RelTol', 1e-12, 'AbsTol', 1e-5);
     

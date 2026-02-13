@@ -51,7 +51,7 @@ function EKF = updateMAG(EKF, BMeas, B_ECI)
     
     % --- 7. Apply Correction to Nominal Quaternion ---
     deltaQ    = smallAng2quat(EKF.x(1:3));
-    EKF.qNom  = quatmultiply(deltaQ, EKF.qNom);
+    EKF.qNom  = quatmultiply(EKF.qNom, deltaQ);
     EKF.qNom  = EKF.qNom / norm(EKF.qNom);
     
     % --- 8. Reset Attitude Error (MEKF Property) ---
