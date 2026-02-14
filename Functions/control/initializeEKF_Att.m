@@ -66,7 +66,22 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     % 4. PROCESS NOISE COVARIANCE (from Allan Deviation analysis)
     % ====================================================================
 
-    EKF.Q = computeIMUNoise(IMU) * 10^2;
+    % Base noise from IMU specifications
+    Q_base = computeIMUNoise(IMU);
+    
+    % --- SPLIT COVARIANCE TUNING ---
+    % 1. ARW (Attitude): Massively inflated to absorb dynamic unmodeled 
+    %    errors (Scale Factor & Misalignment) during high-rate maneuvers.
+    % 2. RRW (Bias): Aggressively inflated to widen the 3-sigma bounds,
+    %    preventing covariance collapse and accommodating the transient
+    %    bias coupling caused by the 17 deg/s slew maneuver.
+    
+    tuningFactorARW = 1e2;  % Keeps attitude NEES stable
+    tuningFactorRRW = 1e10; % NEW: Massive inflation to catch the bias spike
+    
+    EKF.Q = zeros(6,6);
+    EKF.Q(1:3, 1:3) = Q_base(1:3, 1:3) * tuningFactorARW;
+    EKF.Q(4:6, 4:6) = Q_base(4:6, 4:6) * tuningFactorRRW;
     
     fprintf(' Process noise (Q):\n');
     fprintf('   - ARW noise (gyro):       %.2e (rad/s)²/s\n', EKF.Q(1,1));
@@ -82,7 +97,7 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
             sqrt(EKF.R_MAG(1,1)));
     
     % Star Tracker noise
-    EKF.R_STR = computeSTRNoise(STR);
+    EKF.R_STR = computeSTRNoise(STR) * 1e4;
     fprintf(' Star Tracker noise (R):  %.2f arcsec (1σ cross-boresight)\n', ...
             rad2deg(sqrt(EKF.R_STR(1,1))) * 3600);
     

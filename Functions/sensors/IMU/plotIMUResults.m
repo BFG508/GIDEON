@@ -103,7 +103,7 @@ function fig = plotIMUResults(t, omegaTrue_body, forceTrue_body, meas, saveFlag)
 
     nFig = nFig + 1;
     fig(nFig) = figure('Name', 'IMU - Gyro Dynamic Bias', ...
-                               'Color', 'w', 'NumberTitle', 'off');
+                       'Color', 'w', 'NumberTitle', 'off');
 
     hold on;
     plot(t, rad2deg(meas.gyro.biasDyn(1,:))*3600, 'r', 'LineWidth', 1.2, ...

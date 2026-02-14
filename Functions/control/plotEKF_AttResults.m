@@ -1,28 +1,28 @@
-function fig = plotEKF_AttResults(t, truth, qEst, biasEst, P_hist, imuMeas, saveFlag)
+function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveFlag)
 %==========================================================================
-% plotEKF_AttResults: Comprehensive MEKF performance analysis and visualization
-%                     with attitude errors, bias estimation, uncertainty bounds,
-%                     and consistency checks.
+% plotEKF_AttResults: Generate quicklook figures for EKF truth vs measurements.
 %
-% Inputs:
-%   t        - Time vector                                        [s], 1xN
-%   truth    - Truth structure with fields:
-%              .qTrue      - True quaternion                          , 4xN
-%              .omegaTrue  - True angular velocity            [rad/s], 3xN
-%              .rECI, .vECI, .B_ECI, etc.
-%   qEst     - Estimated quaternion                                   , 4xN
-%   biasEst  - Estimated gyro bias                            [rad/s], 3xN
-%   P_hist   - Covariance history                                 , 6x6xN
-%   imuMeas  - IMU measurements structure
-%   saveFlag - (Optional) Boolean. If true, saves figures to 'Figures/MEKF'.
+% INPUTS:
+%   t        - Time vector                                           [s], 1xN
+%   truth    - Ground truth structure (from generateGroundTruth) with fields:
+%              .qTrue      - True attitude quaternion (ECI to Body)     , 4xN
+%              .omegaTrue  - True angular velocity (body frame)  [rad/s], 3xN
+%              .rECI       - True position in ECI                    [m], 3xN
+%              .vECI       - True velocity in ECI                  [m/s], 3xN
+%              .B_ECI      - True magnetic field in ECI             [nT], 3xN
+%   qEst     - Estimated attitude quaternion history                    , 4xN
+%   biasEst  - Estimated gyro bias history                       [rad/s], 3xN
+%   PHist    - Covariance matrix history                                , 6x6xN
+%   imuMeas  - IMU measurements structure (contains .gyro.omegaBody)
+%   saveFlag - (Optional) Boolean. If true, saves figures to 'Figures/EKF'.
 %              Default: false
 %
-% Outputs:
-%   fig      - Array of figure handles
+% OUTPUTS:
+%   fig      - Array of figure handles for the generated plots (8x1)
 %
-% Plots generated:
+% PLOTS GENERATED:
 %   1) Attitude error (3-axis Euler angles) with ±3σ bounds
-%   2) Attitude error norm and quaternion normalization check
+%   2) Attitude error norm magnitude
 %   3) Gyro bias estimation error with ±3σ bounds
 %   4) Attitude and bias uncertainty evolution (3σ)
 %   5) NEES consistency check (chi-squared bounds)
@@ -42,17 +42,15 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, P_hist, imuMeas, save
     
     % Prepare output directory if saving
     if saveFlag
-        saveDir = fullfile(pwd, 'Figures', 'MEKF');
+        saveDir = fullfile(pwd, 'Figures', 'EKF', 'Attitude');
         if ~exist(saveDir, 'dir')
             mkdir(saveDir);
             fprintf('\n✓ Created directory: %s\n', saveDir);
         end
-        fprintf('\n--- Saving MEKF figures ---\n');
+        fprintf('\n--- Saving EKF figures ---\n');
     end
     
-    %% ------------------------------------------------------------------------
-    % COMPUTE ERRORS
-    % -------------------------------------------------------------------------
+    % Compute errors
     qError      = zeros(4, N);
     attErrorDeg = zeros(3, N);
     
@@ -67,342 +65,353 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, P_hist, imuMeas, save
     end
     
     % Gyro bias error (assume true bias = 0)
-    biasTrue       = zeros(3, N);
-    biasErrorDegph = rad2deg(biasEst - biasTrue) * 3600;
+    biasTrue = zeros(3, N);
+    biasErr  = rad2deg(biasEst - biasTrue) * 3600;
     
     % Extract uncertainty (1σ) from covariance
     sigmaAtt  = zeros(3, N);
     sigmaBias = zeros(3, N);
     
     for k = 1:N
-        sigmaAtt(:,k)  = rad2deg(sqrt(diag(P_hist(1:3, 1:3, k))));
-        sigmaBias(:,k) = rad2deg(sqrt(diag(P_hist(4:6, 4:6, k)))) * 3600;
+        sigmaAtt(:,k)  = rad2deg(sqrt(diag(PHist(1:3, 1:3, k))));
+        sigmaBias(:,k) = rad2deg(sqrt(diag(PHist(4:6, 4:6, k)))) * 3600;
     end
     
     %% ------------------------------------------------------------------------
     % 1. ATTITUDE ERROR (3-AXIS) WITH UNCERTAINTY BOUNDS
     % -------------------------------------------------------------------------
+
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - Attitude Error', ...
-                       'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [100, 100, 1370, 890]);
+    fig(nFig) = figure('Name', 'EKF - Attitude Error', ...
+                       'Color', 'w', 'NumberTitle', 'off');
+
+    tLayout = tiledlayout(3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+    axisLabels = {'Roll [deg]', 'Pitch [deg]', 'Yaw [deg]'};
     
-    axisLabels = {'Roll (X) [deg]', 'Pitch (Y) [deg]', 'Yaw (Z) [deg]'};
-    
+    idxConverged = max(1, round(0.02 * length(t))) : length(t);
     for i = 1:3
-        subplot(3,1,i);
-        hold on; grid on;
+        ax = nexttile;
+        hold(ax, 'on');
         
-        plot(t/60, attErrorDeg(i,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Error');
-        plot(t/60,  3*sigmaAtt(i,:), 'r--', 'LineWidth', 1.2, 'DisplayName', '±3σ');
-        plot(t/60, -3*sigmaAtt(i,:), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
+        % Plot data
+        plot(ax, t/60, attErrorDeg(i,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Error');
+        plot(ax, t/60,  3*sigmaAtt(i,:), 'r--', 'LineWidth', 1.2, 'DisplayName', '\pm3σ');
+        plot(ax, t/60, -3*sigmaAtt(i,:), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
         
-        ylabel(axisLabels{i}, 'FontSize', 10, 'FontWeight', 'bold');
-        legend('Location', 'best', 'FontSize', 9);
+        ylabel(ax, axisLabels{i}, 'FontSize', 10, 'FontWeight', 'bold');
+        set(ax, 'FontSize', 9);
+        grid(ax, 'on');
+        xlim(ax, [t(1), t(end)]/60);
         
-        if i == 1
-            title('Attitude Estimation Error (Euler Angles)', ...
-                  'FontSize', 13, 'FontWeight', 'bold');
-        end
-        if i == 3
-            xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-        end
-        
-        set(gca, 'FontSize', 9);
-        xlim([t(1)/60, t(end)/60]);
-        
-        rmsError = rms(attErrorDeg(i,:));
-        text(0.02, 0.95, sprintf('RMS = %.3f°', rmsError), ...
-             'Units', 'normalized', 'FontSize', 9, 'BackgroundColor', 'white');
+        yMax = max(3 * sigmaAtt(i, idxConverged));
+        yMax = max(yMax * 1.5, 0.1); 
+        ylim(ax, [-yMax, yMax]);
     end
     
+    title(tLayout, 'Attitude Error (Euler Angles)', ...
+          'FontSize', 14, 'FontWeight', 'bold');
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % One legend for the whole figure
+    lgd = legend(nexttile(1), 'Orientation', 'horizontal', 'FontSize', 11);
+    lgd.Layout.Tile = 'north';
+    
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig1_attitude_error');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig1_attitude_error');
     end
     
     %% ------------------------------------------------------------------------
-    % 2. ATTITUDE ERROR NORM & QUATERNION NORMALIZATION CHECK
+    % 2. ATTITUDE ERROR NORM
     % -------------------------------------------------------------------------
+
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - Attitude Error Norm', ...
-                       'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [150, 150, 1370, 600]);
+    fig(nFig) = figure('Name', 'EKF - Attitude Error Norm', ...
+                       'Color', 'w', 'NumberTitle', 'off');
     
-    subplot(2,1,1);
-    hold on; grid on;
-    
-    attErrorNorm = zeros(1, N);
+    attErrNorm = zeros(1, N);
     for k = 1:N
-        attErrorNorm(k) = 2 * acos(min(abs(qError(1,k)), 1));
+        attErrNorm(k) = 2 * acos(min(abs(qError(1,k)), 1));
     end
+    meanErr = mean(rad2deg(attErrNorm));
+    masErr  = max(rad2deg(attErrNorm));
     
-    plot(t/60, rad2deg(attErrorNorm), 'b-', 'LineWidth', 1.5);
+    plot(t/60, rad2deg(attErrNorm), 'b-', 'LineWidth', 1.5);
     ylabel('Attitude Error [deg]', 'FontSize', 10, 'FontWeight', 'bold');
-    title('Total Attitude Error Magnitude', 'FontSize', 13, 'FontWeight', 'bold');
+    title(sprintf('Attitude Error Magnitude | Mean = %.3f° | Max = %.3f°', meanErr, masErr), ...
+          'FontSize', 13, 'FontWeight', 'bold');
     
-    set(gca, 'FontSize', 9);
-    xlim([t(1)/60, t(end)/60]);
-    
-    meanErr = mean(rad2deg(attErrorNorm));
-    maxErr  = max(rad2deg(attErrorNorm));
-    text(0.02, 0.95, sprintf('Mean = %.3f°\nMax = %.3f°', meanErr, maxErr), ...
-         'Units', 'normalized', 'FontSize', 9, 'BackgroundColor', 'white', ...
-         'VerticalAlignment', 'top');
-    
-    subplot(2,1,2);
-    hold on; grid on;
-    
-    qNormEst  = vecnorm(qEst, 2, 1);
-    qNormTrue = vecnorm(truth.qTrue, 2, 1);
-    
-    plot(t/60, qNormEst - 1, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Estimated');
-    plot(t/60, qNormTrue - 1, 'r--', 'LineWidth', 1.2, 'DisplayName', 'True');
-    
-    ylabel('||q|| - 1', 'FontSize', 10, 'FontWeight', 'bold');
-    xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-    title('Quaternion Normalization Check', 'FontSize', 13, 'FontWeight', 'bold');
-    legend('Location', 'best', 'FontSize', 9);
-    
-    set(gca, 'FontSize', 9);
-    xlim([t(1)/60, t(end)/60]);
-    ylim([-1e-10, 1e-10]);
+    set(gca, 'FontSize', 10);
+    grid on;
+    xlim([t(1), t(end)]/60);
     
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig2_attitude_norm');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig2_attitude_norm');
     end
     
     %% ------------------------------------------------------------------------
     % 3. GYRO BIAS ESTIMATION ERROR
     % -------------------------------------------------------------------------
+
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - Gyro Bias Error', ...
-                       'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [200, 200, 1370, 890]);
+    fig(nFig) = figure('Name', 'EKF - Gyro Bias Error', ...
+                       'Color', 'w', 'NumberTitle', 'off');
+
+    tLayout = tiledlayout(3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
     
     axisLabels = {'X-axis [deg/h]', 'Y-axis [deg/h]', 'Z-axis [deg/h]'};
     
+    idxConverged = max(1, round(0.02 * length(t))) : length(t);
     for i = 1:3
-        subplot(3,1,i);
-        hold on; grid on;
+        ax = nexttile;
+        hold(ax, 'on');
         
-        plot(t/60, biasErrorDegph(i,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Error');
-        plot(t/60,  3*sigmaBias(i,:), 'r--', 'LineWidth', 1.2, 'DisplayName', '±3σ');
-        plot(t/60, -3*sigmaBias(i,:), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
+        % Plot data
+        plot(ax, t/60, biasErr(i,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Error');
+        plot(ax, t/60,  3*sigmaBias(i,:), 'r--', 'LineWidth', 1.2, 'DisplayName', '\pm3σ');
+        plot(ax, t/60, -3*sigmaBias(i,:), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
         
-        ylabel(axisLabels{i}, 'FontSize', 10, 'FontWeight', 'bold');
-        legend('Location', 'best', 'FontSize', 9);
+        ylabel(ax, axisLabels{i}, 'FontSize', 10, 'FontWeight', 'bold');
+        set(ax, 'FontSize', 9);
+        grid(ax, 'on');
+        xlim(ax, [t(1), t(end)]/60);
         
-        if i == 1
-            title('Gyro Bias Estimation Error', 'FontSize', 13, 'FontWeight', 'bold');
-        end
-        if i == 3
-            xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-        end
-        
-        set(gca, 'FontSize', 9);
-        xlim([t(1)/60, t(end)/60]);
-        
-        rmsError = rms(biasErrorDegph(i,:));
-        text(0.02, 0.95, sprintf('RMS = %.3f deg/h', rmsError), ...
-             'Units', 'normalized', 'FontSize', 9, 'BackgroundColor', 'white');
+        yMax = max(3 * sigmaBias(i, idxConverged));
+        yMax = max(yMax * 1.5, 0.1); 
+        ylim(ax, [-yMax, yMax]);
     end
     
+    title(tLayout, 'Gyroscope Bias Error', ...
+          'FontSize', 14, 'FontWeight', 'bold');
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % One legend for the whole figure
+    lgd = legend(nexttile(1), 'Orientation', 'horizontal', 'FontSize', 11);
+    lgd.Layout.Tile = 'north';
+    
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig3_gyro_bias_error');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig3_gyro_bias_error');
     end
     
     %% ------------------------------------------------------------------------
     % 4. ATTITUDE AND BIAS UNCERTAINTY EVOLUTION (3σ)
     % -------------------------------------------------------------------------
+    
     nFig = nFig + 1;
     fig(nFig) = figure('Name', 'MEKF - Uncertainty Evolution', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [250, 250, 1370, 600]);
+                       'Position', [450, 450, 900, 600]);
+                   
+    % --- CREATE TILED LAYOUT ---
+    tLayout = tiledlayout(2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
     
-    subplot(2,1,1);
-    hold on; grid on;
+    % Define the steady-state index (ignore the first 2% of data for scaling)
+    idxConverged = max(1, round(0.02 * length(t))) : length(t);
     
-    plot(t/60, 3*sigmaAtt(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'Roll');
-    plot(t/60, 3*sigmaAtt(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Pitch');
-    plot(t/60, 3*sigmaAtt(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Yaw');
+    % --- (1) Top: Attitude Uncertainty ---
+    ax1 = nexttile;
+    hold(ax1, 'on');
     
-    ylabel('3σ Uncertainty [deg]', 'FontSize', 10, 'FontWeight', 'bold');
-    title('Attitude Uncertainty Evolution', 'FontSize', 13, 'FontWeight', 'bold');
-    legend('Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', 10);
+    plot(ax1, t/60, 3*sigmaAtt(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'Roll');
+    plot(ax1, t/60, 3*sigmaAtt(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Pitch');
+    plot(ax1, t/60, 3*sigmaAtt(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Yaw');
     
-    set(gca, 'FontSize', 9);
-    xlim([t(1)/60, t(end)/60]);
+    ylabel(ax1, '3σ Uncertainty [deg]', 'FontSize', 10, 'FontWeight', 'bold');
+    title(ax1, 'Attitude Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
     
-    subplot(2,1,2);
-    hold on; grid on;
+    set(ax1, 'FontSize', 10); 
+    grid(ax1, 'on');
+    xlim(ax1, [t(1), t(end)]/60);
+
+    yMax = max(3 * sigmaAtt(i, idxConverged));
+    yMax = max(yMax * 1.5, 0.1); 
+    ylim(ax1, [0, yMax]);
     
-    plot(t/60, 3*sigmaBias(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'X-axis');
-    plot(t/60, 3*sigmaBias(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Y-axis');
-    plot(t/60, 3*sigmaBias(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Z-axis');
+    legend(ax1, 'Location', 'northeast', 'FontSize', 10);
     
-    ylabel('3σ Uncertainty [deg/h]', 'FontSize', 10, 'FontWeight', 'bold');
-    xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-    title('Gyro Bias Uncertainty Evolution', 'FontSize', 13, 'FontWeight', 'bold');
-    legend('Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', 10);
+    % --- (2) Bottom: Bias Uncertainty ---
+    ax2 = nexttile;
+    hold(ax2, 'on');
     
-    set(gca, 'FontSize', 9);
-    xlim([t(1)/60, t(end)/60]);
+    plot(ax2, t/60, 3*sigmaBias(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'X-axis');
+    plot(ax2, t/60, 3*sigmaBias(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Y-axis');
+    plot(ax2, t/60, 3*sigmaBias(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Z-axis');
+    
+    ylabel(ax2, '3σ Uncertainty [deg/h]', 'FontSize', 10, 'FontWeight', 'bold');
+    title(ax2, 'Gyroscope Bias Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
+    
+    set(ax2, 'FontSize', 10); 
+    grid(ax2, 'on');
+    xlim(ax2, [t(1), t(end)]/60);
+    
+    yMax = max(3 * sigmaBias(i, idxConverged));
+    yMax = max(yMax * 1.5, 0.1); 
+    ylim(ax2, [0, yMax]);
+    
+    legend(ax2, 'Location', 'northeast', 'FontSize', 10);
+    
+    % Global X Label
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
     
     if saveFlag
         saveFigure(fig(nFig), saveDir, 'MEKF_fig4_uncertainty_evolution');
     end
     
     %% ------------------------------------------------------------------------
-    % 5. NEES CONSISTENCY CHECK (CHI-SQUARED BOUNDS)
+    % 5. NEES CONSISTENCY CHECK
     % -------------------------------------------------------------------------
+    
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - NEES Consistency', ...
+    fig(nFig) = figure('Name', 'EKF - NEES Consistency', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [300, 300, 1370, 600]);
+                       'Position', [500, 200, 1000, 700]);
     
     NEESatt = zeros(1, N);
     for k = 1:N
-        % MEKF error state from quaternion error
+        % EKF error state from quaternion error
         qw         = max(abs(qError(1,k)), 1e-10);
         deltaTheta = 2 * qError(2:4, k) / qw;
         
         % Add regularization to avoid numerical issues
-        Preg  = P_hist(1:3, 1:3, k) + eye(3)*1e-12;
-        Pinv  = inv(Preg);
+        Preg  = PHist(1:3, 1:3, k) + eye(3)*1e-12;
         
         % NEES = δθ' * P^(-1) * δθ
-        NEESatt(k) = deltaTheta' * Pinv * deltaTheta;
+        NEESatt(k) = deltaTheta' * (Preg \ deltaTheta);
     end
-    
-    subplot(2,1,1);
-    hold on; grid on;
-    
-    plot(t/60, NEESatt, 'b-', 'LineWidth', 1.5, 'DisplayName', 'NEES');
     
     % Chi-squared bounds (95% confidence interval for 3 DOF)
     r1 = chi2inv(0.025, 3);
     r2 = chi2inv(0.975, 3);
-    
-    plot(t/60, r2*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', '95% CI');
-    plot(t/60, r1*ones(size(t)), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
-    
-    ylabel('NEES', 'FontSize', 10, 'FontWeight', 'bold');
-    title('Normalized Estimation Error Squared (NEES) - Attitude', ...
-          'FontSize', 13, 'FontWeight', 'bold');
-    legend('Location', 'best', 'FontSize', 9);
-    
-    set(gca, 'FontSize', 9);
-    xlim([t(1)/60, t(end)/60]);
-    
+
     % Percentage inside bounds
     inside = sum(NEESatt > r1 & NEESatt < r2) / N * 100;
-    text(0.02, 0.95, sprintf('%.1f%% inside 95%% CI', inside), ...
-         'Units', 'normalized', 'FontSize', 9, 'BackgroundColor', 'white', ...
-         'VerticalAlignment', 'top');
+
+    tLayout = tiledlayout(2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
     
-    % Average NEES
-    subplot(2,1,2);
-    hold on; grid on;
+    % --- (1) Top: Instantaneous NEES ---
+    ax1 = nexttile;
+    hold(ax1, 'on');
+    
+    plot(ax1, t/60, NEESatt, 'b-', 'LineWidth', 1.5, 'DisplayName', 'NEES');
+    
+    plot(ax1, t/60, r2*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', '95% CI');
+    plot(ax1, t/60, r1*ones(size(t)), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
+    
+    ylabel(ax1, 'NEES', 'FontSize', 10, 'FontWeight', 'bold');
+    set(ax1, 'FontSize', 9);
+    grid(ax1, 'on');
+    xlim(ax1, [t(1), t(end)]/60);
+    
+    % --- (2) Bottom: Cumulative Average NEES ---
+    ax2 = nexttile;
+    hold(ax2, 'on');
     
     avgNEES = cumsum(NEESatt) ./ (1:N);
-    plot(t/60, avgNEES, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Average NEES');
-    plot(t/60, 3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', 'Expected (3 DOF)');
+    plot(ax2, t/60, avgNEES, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Average NEES');
+    plot(ax2, t/60, 3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', 'Expected (3 DOF)');
     
-    ylabel('Average NEES', 'FontSize', 10, 'FontWeight', 'bold');
-    xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-    title('Cumulative Average NEES (should converge to DOF = 3)', ...
-          'FontSize', 13, 'FontWeight', 'bold');
-    legend('Location', 'best', 'FontSize', 9);
+    ylabel(ax2, 'Average NEES', 'FontSize', 10, 'FontWeight', 'bold');
+    set(ax2, 'FontSize', 9);
+    grid(ax2, 'on');
+    xlim(ax2, [t(1), t(end)]/60);
     
-    set(gca, 'FontSize', 9);
-    xlim([t(1)/60, t(end)/60]);
-    ylim([0 10]);
+    % One legend for the whole figure
+    title(tLayout, sprintf('Attitude Normalized Estimation Error Squared | %.1f%% inside 95%% CI', inside), ...
+          'FontSize', 14, 'FontWeight', 'bold');
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % lgd = legend(ax1, 'Orientation', 'horizontal', 'FontSize', 11);
+    % lgd.Layout.Tile = 'north';
     
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig5_NEES_consistency');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig5_NEES_consistency');
     end
     
     %% ------------------------------------------------------------------------
     % 6. QUATERNION COMPONENTS: TRUE VS ESTIMATED
     % -------------------------------------------------------------------------
+
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - Quaternion Components', ...
+    fig(nFig) = figure('Name', 'EKF - Quaternion Components', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [350, 350, 1370, 890]);
+                       'Position', [450, 50, 950, 950]);
     
-    labels = {'q_w (scalar)', 'q_x', 'q_y', 'q_z'};
+    tLayout = tiledlayout(4, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+    
+    labels = {'q_w', 'q_x', 'q_y', 'q_z'};
     
     for i = 1:4
-        subplot(4,1,i);
-        hold on; grid on;
+        ax = nexttile;
+        hold(ax, 'on'); grid(ax, 'on');
         
-        plot(t/60, truth.qTrue(i,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'True');
-        plot(t/60, qEst(i,:), 'b--', 'LineWidth', 1.2, 'DisplayName', 'Estimated');
+        % Plot data natively
+        plot(ax, t/60, truth.qTrue(i,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'True');
+        plot(ax, t/60, qEst(i,:), 'b--', 'LineWidth', 1.2, 'DisplayName', 'Estimated');
         
-        ylabel(labels{i}, 'FontSize', 10, 'FontWeight', 'bold');
-        legend('Location', 'best', 'FontSize', 9);
-        
-        if i == 1
-            title('Quaternion Components: True vs Estimated', ...
-                  'FontSize', 13, 'FontWeight', 'bold');
-        end
-        if i == 4
-            xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-        end
-        
-        set(gca, 'FontSize', 9);
-        xlim([t(1)/60, t(end)/60]);
+        ylabel(ax, labels{i}, 'FontSize', 10, 'FontWeight', 'bold');
+        set(ax, 'FontSize', 9);
+        xlim(ax, [t(1), t(end)]/60);
     end
     
+    title(tLayout, 'Quaternion Components', ...
+          'FontSize', 14, 'FontWeight', 'bold');
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % One legend for the whole figure
+    lgd = legend(nexttile(1), 'Orientation', 'horizontal', 'FontSize', 11);
+    lgd.Layout.Tile = 'north';
+    
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig6_quaternion_components');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig6_quaternion_components');
     end
     
     %% ------------------------------------------------------------------------
-    % 7. ANGULAR VELOCITY: TRUE VS MEASURED
+    % 7. ANGULAR VELOCITY: TRUE VS ESTIMATED
     % -------------------------------------------------------------------------
+
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - Angular Velocity', ...
+    fig(nFig) = figure('Name', 'EKF - Angular Velocity', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [400, 400, 1370, 800]);
+                       'Position', [450, 50, 950, 950]);
     
-    axisLabels = {'ω_x [deg/s]', 'ω_y [deg/s]', 'ω_z [deg/s]'};
+    tLayout = tiledlayout(3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+    
+    axisLabels = {'\omega_x [deg/s]', '\omega_y [deg/s]', '\omega_z [deg/s]'};
     
     for i = 1:3
-        subplot(3,1,i);
-        hold on; grid on;
+        ax = nexttile;
+        hold(ax, 'on'); 
         
-        plot(t/60, rad2deg(truth.omegaTrue(i,:)), 'r-', 'LineWidth', 1.5, ...
+        plot(ax, t/60, rad2deg(truth.omegaTrue(i,:)), 'r-', 'LineWidth', 1.5, ...
              'DisplayName', 'True');
-        plot(t/60, rad2deg(imuMeas.gyro.omegaBody(i,:)), 'b--', 'MarkerSize', 1, ...
+        plot(ax, t/60, rad2deg(imuMeas.gyro.omegaBody(i,:)), 'b--', 'LineWidth', 1, ...
              'DisplayName', 'Measured');
         
-        ylabel(axisLabels{i}, 'FontSize', 10, 'FontWeight', 'bold');
-        legend('Location', 'best', 'FontSize', 9);
-        
-        if i == 1
-            title('Angular Velocity: True vs Measured (IMU)', ...
-                  'FontSize', 13, 'FontWeight', 'bold');
-        end
-        if i == 3
-            xlabel('Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-        end
-        
-        set(gca, 'FontSize', 9);
-        xlim([t(1)/60, t(end)/60]);
+        ylabel(ax, axisLabels{i}, 'FontSize', 10, 'FontWeight', 'bold');
+        set(ax, 'FontSize', 9);
+        grid(ax, 'on');
+        xlim(ax, [t(1), t(end)]/60);
     end
     
+    title(tLayout, 'Angular Velocity', ...
+          'FontSize', 13, 'FontWeight', 'bold');
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % One legend for the whole figure
+    lgd = legend(nexttile(1), 'Orientation', 'horizontal', 'FontSize', 11);
+    lgd.Layout.Tile = 'north';
+    
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig7_angular_velocity');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig7_angular_velocity');
     end
     
     %% ------------------------------------------------------------------------
     % 8. ERROR STATISTICS SUMMARY (BAR CHARTS)
     % -------------------------------------------------------------------------
+
     nFig = nFig + 1;
-    fig(nFig) = figure('Name', 'MEKF - Error Statistics', ...
+    fig(nFig) = figure('Name', 'EKF - Error Statistics', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [450, 450, 1100, 600]);
+                       'Position', [500, 150, 1000, 800]);
     
     % Compute statistics
     stats.attMean  = mean(abs(attErrorDeg), 2);
@@ -410,43 +419,47 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, P_hist, imuMeas, save
     stats.attMax   = max(abs(attErrorDeg), [], 2);
     stats.attRms   = sqrt(mean(attErrorDeg.^2, 2));
     
-    stats.biasMean = mean(abs(biasErrorDegph), 2);
-    stats.biasStd  = std(biasErrorDegph, 0, 2);
-    stats.biasMax  = max(abs(biasErrorDegph), [], 2);
-    stats.biasRms  = sqrt(mean(biasErrorDegph.^2, 2));
+    stats.biasMean = mean(abs(biasErr), 2);
+    stats.biasStd  = std(biasErr, 0, 2);
+    stats.biasMax  = max(abs(biasErr), [], 2);
+    stats.biasRms  = sqrt(mean(biasErr.^2, 2));
     
     % Plot bar charts
     subplot(1,2,1);
     x     = 1:3;
     width = 0.2;
     
-    bar(x - 1.5*width, stats.attMean, width, 'DisplayName', 'Mean');
+    h(1) = bar(x - 1.5*width, stats.attMean, width, 'DisplayName', 'Mean');
     hold on;
-    bar(x - 0.5*width, stats.attStd, width, 'DisplayName', 'Std Dev');
-    bar(x + 0.5*width, stats.attRms, width, 'DisplayName', 'RMS');
-    bar(x + 1.5*width, stats.attMax, width, 'DisplayName', 'Max');
+    h(2) = bar(x - 0.5*width, stats.attStd, width, 'DisplayName', 'STD');
+    h(3) = bar(x + 0.5*width, stats.attRms, width, 'DisplayName', 'RMS');
+    h(4) = bar(x + 1.5*width, stats.attMax, width, 'DisplayName', 'Max');
     
-    set(gca, 'XTick', 1:3, 'XTickLabel', {'Roll', 'Pitch', 'Yaw'}, 'FontSize', 10);
     ylabel('Error [deg]', 'FontSize', 11, 'FontWeight', 'bold');
     title('Attitude Error Statistics', 'FontSize', 12, 'FontWeight', 'bold');
-    legend('Location', 'best', 'FontSize', 9);
     grid on;
+    set(gca, 'XTick', 1:3, 'XTickLabel', {'Roll', 'Pitch', 'Yaw'}, 'FontSize', 10);
     
     subplot(1,2,2);
-    bar(x - 1.5*width, stats.biasMean, width, 'DisplayName', 'Mean');
+    bar(x - 1.5*width, stats.biasMean, width);
     hold on;
-    bar(x - 0.5*width, stats.biasStd, width, 'DisplayName', 'Std Dev');
-    bar(x + 0.5*width, stats.biasRms, width, 'DisplayName', 'RMS');
-    bar(x + 1.5*width, stats.biasMax, width, 'DisplayName', 'Max');
+    bar(x - 0.5*width, stats.biasStd, width);
+    bar(x + 0.5*width, stats.biasRms, width);
+    bar(x + 1.5*width, stats.biasMax, width);
     
-    set(gca, 'XTick', 1:3, 'XTickLabel', {'X', 'Y', 'Z'}, 'FontSize', 10);
     ylabel('Error [deg/h]', 'FontSize', 11, 'FontWeight', 'bold');
     title('Gyro Bias Error Statistics', 'FontSize', 12, 'FontWeight', 'bold');
-    legend('Location', 'best', 'FontSize', 9);
     grid on;
+    set(gca, 'XTick', 1:3, 'XTickLabel', {'X', 'Y', 'Z'}, 'FontSize', 10);
+    
+    % One legend for the whole figure
+    L = legend(h, 'Orientation', 'horizontal', 'FontSize', 11);
+    L.Units = 'normalized';
+    L.Position(1) = 0.5 - L.Position(3)/2;
+    L.Position(2) = 0.955;
     
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig8_error_statistics');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig8_error_statistics');
     end
    
 end
