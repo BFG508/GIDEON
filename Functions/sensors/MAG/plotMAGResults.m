@@ -241,7 +241,7 @@ function fig = plotMAGResults(t, BTrue_body, meas, MAG, saveFlag)
     set(gca, 'FontSize', 10);
     view(35, 25);
     
-    % One legend for the whole figure (simple approach: put it in the last axes)
+    % One legend for the whole figure
     lgd = legend('Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', 10);
     lgd.Position(1) = 0.5 - lgd.Position(3)/2;
     lgd.Position(2) = 0.96;

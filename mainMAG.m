@@ -59,7 +59,7 @@
 %   - Sampling rate
 %   - Deterministic error limits (hard iron, soft iron, non-orthogonality)
 %
-%   Edit Section 2 for:
+%   Edit Section 2 (initializeOrbit.m & initializeSpacecraft.m) for:
 %   - Simulation duration and epoch
 %   - Orbital elements (SMA, ECC, INC, RAAN, AOP, TA)
 %   - Spacecraft parameters (mass, drag/SRP areas)
@@ -81,91 +81,24 @@ MAG = initializeMAG();
 % =========================================================================
 
 % Simulation time settings
-epoch = datetime(2026,2,10,0,0,0,'TimeZone','UTC'); % Start date
-T_total = 60 * 45;                                  % Total simulation time [s]
-t = 0:MAG.dt:T_total;                               % Time vector [s]
-N = numel(t);
+epoch   = datetime(2026,1,1,0,0,0,'TimeZone','UTC'); % Start date
+T_total = 60 * 45;                                   % Total simulation time [s]
+t       = 0:MAG.dt:T_total;                          % Time vector [s]
+N       = numel(t);
 
-fprintf('\n=== Generating Truth Trajectory ===\n');
-fprintf(' Simulation time: %.1f s (%d samples)\n', T_total, N);
+% Initialize orbit and S/C models
+orbitalElems          = initializeOrbit(epoch);
+[scParams, attParams] = initializeSpacecraft();
 
-% --- True Orbital Position (ECI frame) ---
-fprintf(' Propagating orbit (J2 + Drag + SRP) ... \n');
+% Generate centralized ground truth
+truth = generateGroundTruth(t, epoch, orbitalElems, scParams, attParams);
 
-    % Spacecraft parameters
-    scParams.mass     = 100.0; % [kg]
-    scParams.areaDrag = 1.0;   % [m²]
-    scParams.areaSRP  = 1.2;   % [m²]
-    scParams.Cd       = 2.0;   %  [-] Drag Coeff
-    scParams.Cr       = 1.5;   %  [-]  SRP Coeff (1 = Absorption, 2 = Reflection)
-    
-    % Orbital elements (randomized LEO)
-    orbitalElems.SMA   = 6378e3 + 200e3 + 400e3 * rand(); % [m]
-    orbitalElems.ECC   =                  0.01 * rand();  % [-]
-    orbitalElems.INC   =                   180 * rand();  % [deg]
-    orbitalElems.RAAN  =                   360 * rand();  % [deg]
-    orbitalElems.AOP   =                   360 * rand();  % [deg]
-    orbitalElems.TA    =                   360 * rand();  % [deg]
-    orbitalElems.epoch = epoch;
-    
-    [rECI, ~] = simulateOrbit(t, orbitalElems, scParams);
-
-% --- ECI to ECEF and Geodetic Coordinates (LLA) ---
-    % Rotate ECI positions to ECEF
-    DCM_ECI2ECEF = dcmeci2ecef('IAU-2000/2006', epoch + seconds(t'));
-    rECEF = zeros(3,N);
-    for k = 1:N
-        rECEF(:,k) = DCM_ECI2ECEF(:,:,k) * rECI(:,k);
-    end
-    
-    % Convert ECEF to Geodetic (LLA) using WGS84
-    LLA = ecef2lla(rECEF', 'WGS84');
-    lat = LLA(:,1)'; % [deg] 1xN
-    lon = LLA(:,2)'; % [deg] 1xN
-    alt = LLA(:,3)'; %   [m] 1xN
-
-% --- Magnetic Field Truth ---
-fprintf(' Using IGRF model ... \n');
-
-    B_ECI = zeros(3,N);
-    decimalYr = 2025 * ones(1,N);
-    
-    XYZ_NED                     = igrfmagm(alt, lat, lon, decimalYr, 13);
-    [B_ECEFx, B_ECEFy, B_ECEFz] = ned2ecefv(XYZ_NED(:,1), XYZ_NED(:,2), XYZ_NED(:,3), ...
-                                            lat(:), lon(:));
-    B_ECEF                      = [B_ECEFx'; B_ECEFy'; B_ECEFz'];
-    
-    DCM_ECEF2ECI = permute(DCM_ECI2ECEF, [2, 1, 3]);
-    for k = 1:N
-        B_ECI(:,k) = DCM_ECEF2ECI(:,:,k) * B_ECEF(:,k);
-    end
-
-% --- Truth Attitude & Body Frame Field ---
-    angleTrue = rand * 2*pi;                    % Rotation angle [rad]
-     axisTrue = randn(3,1);
-     axisTrue = axisTrue / norm(axisTrue);      % Unit rotation axis
-    
-    qTrue      = zeros(4,N);
-    qTrue(:,1) = [cos(angleTrue/2); ...         % Scalar part
-                  sin(angleTrue/2) * axisTrue]; % Vector part
-    
-    omegaTrue_body      = zeros(3,N); % [rad/s] body rates
-    omegaTrue_body(1,:) = deg2rad(0.15);
-    omegaTrue_body(2,:) = deg2rad(0.10) * sin(2*pi*(1/300)*t);
-    omegaTrue_body(3,:) = deg2rad(0.08) * cos(2*pi*(1/500)*t);
-    
-    for k = 2:N
-        qDot       = 1/2 * skewMatrix(omegaTrue_body(:,k-1)) * qTrue(:,k-1);
-        
-        qTrue(:,k) = qTrue(:,k-1) + qDot * MAG.dt;
-        qTrue(:,k) = qTrue(:,k) / norm(qTrue(:,k));
-    end
-    
-    BTrue_body = zeros(3,N);
-    for k = 1:N
-        DCM_ECI2B  = quat2dcm(qTrue(:,k));
-        BTrue_body(:,k) = DCM_ECI2B * B_ECI(:,k);
-    end
+% Rotate magnetic field to body frame
+BTrue_body = zeros(3,N);
+for k = 1:N
+    DCM_ECI2B       = quat2dcm(truth.qTrue(:,k));
+    BTrue_body(:,k) = DCM_ECI2B * truth.B_ECI(:,k);
+end
 
 fprintf('\n=== MAG Ground Truth Complete (Mean ||B||: %.0f nT) ===\n', mean(vecnorm(BTrue_body)));
 

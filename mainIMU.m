@@ -58,7 +58,7 @@
 %   - Sampling rate
 %   - Deterministic error limits (bias, scale factor, non-orthogonality)
 %
-%   Edit Section 2 for:
+%   Edit Section 2 (initializeOrbit.m & initializeSpacecraft.m) for:
 %   - Simulation duration
 %   - Truth trajectory profile (angular rates, specific forces)
 %   - Dynamics scenarios (fine-pointing, slew, tumbling)
@@ -79,41 +79,31 @@ IMU = initializeIMU();
 % =========================================================================
 
 % Simulation time settings
-T_total = 60 * 45;    % Total simulation time [s]
-t = 0:IMU.dt:T_total; % Time vector [s]
-N = numel(t);
+epoch   = datetime(2026,1,1,0,0,0,'TimeZone','UTC'); % Start date
+T_total = 60 * 45;                                   % Total simulation time [s]
+t       = 0:IMU.dt:T_total;                          % Time vector [s]
+N       = numel(t);
 
-fprintf('\n=== Generating Truth Trajectory ===\n');
-fprintf(' Simulation time: %.1f s (%d samples)\n', T_total, N);
+% Initialize orbit and S/C models
+orbitalElems          = initializeOrbit(epoch);
+[scParams, attParams] = initializeSpacecraft();
 
-% --- True Angular Rate Profile ---
-% Define a smooth, low-rate rotational profile representative of:
-%  - A spacecraft in fine-pointing mode with small residual rates
-%  - Useful to test IMU noise and bias behaviour without large dynamics
-    omegaTrue_body = zeros(3, N);        % [rad/s]
-    
-    % Constant small roll rate (e.g. residual wheel imbalance)
-    omegaTrue_body(1, :) = deg2rad(0.03) * ones(1, N);           % [rad/s]
-    
-    % Slow sinusoidal pitch motion (e.g. thermal flexing / structural mode)
-    fPitch = 1/300;                                              % [Hz]
-    omegaTrue_body(2, :) = deg2rad(0.02) * sin(2*pi*fPitch * t); % [rad/s]
-    
-    % Even slower yaw drift (e.g. long-term pointing drift)
-    fYaw = 1/500;                                                % [Hz]
-    omegaTrue_body(3, :) = deg2rad(0.01) * cos(2*pi*fYaw * t);   % [rad/s]
-    
-    fprintf(' Maximum truth angular rates: [%.3f, %.3f, %.3f] deg/s\n', ...
-        max(rad2deg(omegaTrue_body(1,:))), ...
-        max(rad2deg(omegaTrue_body(2,:))), ...
-        max(rad2deg(omegaTrue_body(3,:))));
+% Generate centralized ground truth
+truth = generateGroundTruth(t, epoch, orbitalElems, scParams, attParams);
 
-% --- True Specific Force Profile ---  
-% Define a smooth profile representative of:
-%  - Spacecraft in LVLH-like frame
-%  - No translational dynamics modelled
-    g0             = 9.80665;                   % [m/s^2]
-    forceTrue_body = repmat([0; 0; -g0], 1, N); % [m/s^2]
+% Extract true angular velocity from the realistic simulation
+omegaTrue_body = truth.omegaTrue;
+
+% Specific force truth 
+% - Representing a 1g static table test (standard for Allan Variance calibration)
+g0             = 9.80665;                   % [m/s^2]
+forceTrue_body = repmat([0; 0; -g0], 1, N); % [m/s^2]
+
+fprintf('\n=== IMU Ground Truth Complete ===\n');
+fprintf(' Maximum truth angular rates: [%.3f, %.3f, %.3f] deg/s\n', ...
+    max(rad2deg(omegaTrue_body(1,:))), ...
+    max(rad2deg(omegaTrue_body(2,:))), ...
+    max(rad2deg(omegaTrue_body(3,:))));
 
 %% ========================================================================
 % 3. GENERATE SYNTHETIC IMU MEASUREMENTS

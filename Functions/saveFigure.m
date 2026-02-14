@@ -18,18 +18,18 @@ function saveFigure(figHandle, figDir, figName)
 %==========================================================================
 
     % Save as MATLAB .fig (native format, fully editable)
-    fig_file = fullfile(figDir, [figName, '.fig']);
-    % savefig(figHandle, fig_file);
-    fprintf('  ✓ Saved: %s\n', fig_file);
+    figFile = fullfile(figDir, [figName, '.fig']);
+    savefig(figHandle, figFile);
+    fprintf('  ✓ Saved: %s\n', figFile);
     
     % Save as PNG raster image (300 DPI for publication quality)
-    png_file = fullfile(figDir, [figName, '.png']);
-    print(figHandle, png_file, '-dpng', '-r300');
-    fprintf('  ✓ Saved: %s\n', png_file);
+    pngFile = fullfile(figDir, [figName, '.png']);
+    print(figHandle, pngFile, '-dpng', '-r300');
+    fprintf('  ✓ Saved: %s\n', pngFile);
     
     % Save as SVG vector graphic (scalable, ideal for presentations/LaTeX)
-    svg_file = fullfile(figDir, [figName, '.svg']);
-    % print(figHandle, svg_file, '-dsvg', '-vector');
-    fprintf('  ✓ Saved: %s\n', svg_file);
+    svgFile = fullfile(figDir, [figName, '.svg']);
+    print(figHandle, svgFile, '-dsvg', '-vector');
+    fprintf('  ✓ Saved: %s\n', svgFile);
 
 end
