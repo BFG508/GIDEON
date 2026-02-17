@@ -18,13 +18,13 @@
 %
 % ALGORITHM:
 %   The measurement model follows the standard equation:
-%     B_meas = M_det * B_true + b_hard_iron + b_dynamic + noise
+%     BMeas = M_det * BTrue + hardIronBias + bDyn + noise
 % 
 %   where:
-%     M_det       : M_SoftIron * M_NonOrth * DCM_Mounting (Deterministic Transform)
-%     b_hard_iron : Static hard iron bias                 (Constant per run)
-%     b_dynamic   : Dynamic bias drift                    (Gauss-Markov process)
-%     noise       : High-frequency white noise            (Gaussian)
+%     M_det        : M_SoftIron * M_NonOrth * DCM_Mounting (Deterministic Transform)
+%     hardIronBias : Static hard iron bias                 (Constant per run)
+%     bDyn         : Dynamic bias drift                    (Gauss-Markov process)
+%     noise        : High-frequency white noise            (Gaussian)
 % 
 % WORKFLOW:
 %   1. Define MAG hardware parameters (sensor specifications) and generate
@@ -53,17 +53,9 @@
 %   - Diagnostic figures: 4 plots in Figures/MAG/ directory
 %
 % CONFIGURATION:
-%   Edit Section 1 (initializeMAG.m) for:
-%   - MAG hardware specifications (noise density, bias instability)
-%   - Mounting misalignment errors
-%   - Sampling rate
-%   - Deterministic error limits (hard iron, soft iron, non-orthogonality)
-%
-%   Edit Section 2 (initializeOrbit.m & initializeSpacecraft.m) for:
-%   - Simulation duration and epoch
-%   - Orbital elements (SMA, ECC, INC, RAAN, AOP, TA)
-%   - Spacecraft parameters (mass, drag/SRP areas)
-%   - Attitude dynamics profile (angular rates)
+%   - Sensor parameters:      Edit initializeMAG.m
+%   - Orbital elements:       Edit initializeOrbit.m
+%   - Spacecraft & Attitude:  Edit initializeSpacecraft.m
 %==========================================================================
 
 clear;
@@ -82,7 +74,7 @@ MAG = initializeMAG();
 
 % Simulation time settings
 epoch   = datetime(2026,1,1,0,0,0,'TimeZone','UTC'); % Start date
-T_total = 60 * 45;                                   % Total simulation time [s]
+T_total = 60 * 60;                                   % Total simulation time [s]
 t       = 0:MAG.dt:T_total;                          % Time vector [s]
 N       = numel(t);
 

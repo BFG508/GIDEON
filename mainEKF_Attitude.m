@@ -28,7 +28,7 @@
 %        error state to zero.
 %
 % WORKFLOW:
-%   1. Initialize hardware parameters (IMU, MAG, 2x STR, Star Catalog)
+%   1. Initialize hardware parameters (IMU, MAG, STR, Star Catalog)
 %   2. Generate ground truth trajectory (LEO orbit, Nadir-pointing attitude)
 %   3. Simulate multi-rate noisy sensor measurements
 %   4. Initialize MEKF (Uses TRIAD algorithm for the first frame)
@@ -52,8 +52,12 @@
 %                         NEES consistency, and angular rates.
 %
 % CONFIGURATION:
-%   Edit Section 1/2 for: Orbital elements, simulation duration, pointing mode.
-%   Edit initializeEKF_Att.m for: Tuning parameters (Q and R matrices).
+%   - Sensor parameters:      Edit initializeIMU.m
+%                                  initializeMAG.m
+%                                  initializeSTR.m
+%   - Orbital elements:       Edit initializeOrbit.m
+%   - Spacecraft & Attitude:  Edit initializeSpacecraft.m
+%   - Tuning parameters:      Edit initializeEKF_Att.m
 %==========================================================================
 
 close all;
@@ -64,7 +68,7 @@ clc;
 % 1. HARDWARE PARAMETERS & SENSOR INITIALIZATION
 % =========================================================================
 
-fprintf('\n=== EKF Initialization ===\n');
+fprintf('\n=== Attitude EKF Initialization ===\n');
 
 % IMU (Gyroscope + Accelerometer)
 IMU = initializeIMU();
@@ -166,7 +170,7 @@ end
 % 5. EKF PROPAGATION AND UPDATE LOOP
 % =========================================================================
 
-fprintf('\n=== Running EKF ===\n');
+fprintf('\n=== Running MEKF ===\n');
 
 % Pre-allocate history
 qEst         = zeros(4,N);
@@ -203,7 +207,7 @@ for k = 2:N
     end
 end
 
-fprintf('=== EKF Propagation Complete ===\n');
+fprintf('=== MEKF Propagation Complete ===\n');
 
 %% ========================================================================
 % 6. ERROR ANALYSIS AND VISUALIZATION

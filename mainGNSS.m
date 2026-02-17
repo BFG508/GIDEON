@@ -18,13 +18,13 @@
 %
 % ALGORITHM:
 %   The measurement model simulates the PVT output:
-%     r_meas = r_CG + DCM_B2I * L_arm + b_pos_GM + noise_pos_white
-%     v_meas = v_CG + DCM_B2I * (omega x L_arm) + b_vel_GM + noise_vel_white
+%     rMeas = rCG + DCM_B2I * LArm + bPosGM + noisePosWhite
+%     vMeas = vCG + DCM_B2I * (omega x LArm) + bVelGM + noiseVelWhite
 %
 % WORKFLOW:
 %   1. Define GNSS hardware parameters via initializeGNSS.m
-%   2. Initialize spacecraft and orbital parameters via helper functions
-%   3. Generate centralized ground truth (Orbit & Attitude)
+%   2. Initialize spacecraft and orbital parameters
+%   3. Generate centralized ground truth
 %   4. Simulate GNSS measurements with Lever Arm and realistic error corruption
 %   5. Validate error models: RMS analysis, Gauss-Markov verification, and 
 %      Lever Arm displacement analysis.
@@ -95,7 +95,7 @@ fprintf('\n--- Position Measurement Error (vs Antenna Truth) ---\n');
 fprintf('  RMS(X): %.2f m\n', rmsPos(1));
 fprintf('  RMS(Y): %.2f m\n', rmsPos(2));
 fprintf('  RMS(Z): %.2f m\n', rmsPos(3));
-fprintf('  Theoretical Expected 1-sigma: %.2f m\n', expectedPosRMS);
+fprintf('  Theoretical Expected 1σ: %.2f m\n', expectedPosRMS);
 
 % --- 4.2 Velocity Error Analysis ---
 velErr = meas.vECI - meas.vClean;
@@ -107,7 +107,7 @@ fprintf('\n--- Velocity Measurement Error (vs Antenna Truth) ---\n');
 fprintf('  RMS(Vx): %.4f m/s\n', rmsVel(1));
 fprintf('  RMS(Vy): %.4f m/s\n', rmsVel(2));
 fprintf('  RMS(Vz): %.4f m/s\n', rmsVel(3));
-fprintf('  Theoretical Expected 1-sigma: %.4f m/s\n', expectedVelRMS);
+fprintf('  Theoretical Expected 1σ: %.4f m/s\n', expectedVelRMS);
 
 % --- 4.3 Gauss-Markov Correlated Bias Verification ---
 stdPosGM = std(meas.posBiasDyn, 0, 2);

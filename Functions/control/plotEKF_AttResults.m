@@ -253,7 +253,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
     
     if saveFlag
-        saveFigure(fig(nFig), saveDir, 'MEKF_fig4_uncertainty_evolution');
+        saveFigure(fig(nFig), saveDir, 'EKF_fig4_uncertainty_evolution');
     end
     
     %% ------------------------------------------------------------------------

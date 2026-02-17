@@ -16,13 +16,13 @@ function GNSS = initializeGNSS()
     GNSS.leverArm = [0.5; 0.0; 1.2]; % [m]
 
     % --- Position Error Model ---
-    GNSS.sigmaPosWhite = 1.5;   % High-frequency thermal noise (1-sigma) [m]
+    GNSS.sigmaPosWhite = 1.5;   % High-frequency thermal noise (1σ) [m]
     GNSS.tauPos        = 600;   % Correlation time for Ephemeris/Iono errors [s]
-    GNSS.sigmaPosGM    = 2.5;   % Correlated noise steady-state (1-sigma) [m]
+    GNSS.sigmaPosGM    = 2.5;   % Correlated noise steady-state (1σ) [m]
 
     % --- Velocity Error Model ---
-    GNSS.sigmaVelWhite = 0.05;  % High-frequency noise (1-sigma) [m/s]
+    GNSS.sigmaVelWhite = 0.05;  % High-frequency noise (1σ) [m/s]
     GNSS.tauVel        = 600;   % Correlation time for Clock Wander [s]
-    GNSS.sigmaVelGM    = 0.02;  % Correlated noise steady-state (1-sigma) [m/s]
+    GNSS.sigmaVelGM    = 0.02;  % Correlated noise steady-state (1σ) [m/s]
 
 end

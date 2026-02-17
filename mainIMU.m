@@ -1,5 +1,5 @@
 %==========================================================================
-% mainIMU.m - Inertial Measurement Unit Simulation
+% mainIMU.m - Inertial Measurement Unit (IMU) Simulation
 %==========================================================================
 %
 % DESCRIPTION:
@@ -17,12 +17,12 @@
 %
 % ALGORITHM:
 %   The measurement model follows the standard equation for each sensor type:
-%     u_meas = T_det * u_true + b_static + b_dynamic + noise
+%     uMeas = T_det * uTrue + bStatic + bDyn + noise
 % 
 %   where:
 %     T_det    : M_SF * M_NonOrth * DCM_Mounting (Deterministic Transform) 
-%     b_static : Turn-on bias                    (Constant per run)
-%     b_dynamic: Dynamic bias drift              (Random Walk / Gauss-Markov process)
+%     bStatic  : Turn-on bias                    (Constant per run)
+%     bDyn     : Dynamic bias drift              (Random Walk / Gauss-Markov process)
 %     noise    : High-frequency white noise      (ARW/VRW)
 % 
 % WORKFLOW:
@@ -52,16 +52,9 @@
 %   - Diagnostic figures: 7 plots in Figures/ directory
 %
 % CONFIGURATION:
-%   Edit Section 1 (initializeIMU.m) for:
-%   - IMU hardware specifications (gyro/accel noise parameters)
-%   - Mounting misalignment errors
-%   - Sampling rate
-%   - Deterministic error limits (bias, scale factor, non-orthogonality)
-%
-%   Edit Section 2 (initializeOrbit.m & initializeSpacecraft.m) for:
-%   - Simulation duration
-%   - Truth trajectory profile (angular rates, specific forces)
-%   - Dynamics scenarios (fine-pointing, slew, tumbling)
+%   - Sensor parameters:      Edit initializeIMU.m
+%   - Orbital elements:       Edit initializeOrbit.m
+%   - Spacecraft & Attitude:  Edit initializeSpacecraft.m
 %==========================================================================
 
 clear;
@@ -80,7 +73,7 @@ IMU = initializeIMU();
 
 % Simulation time settings
 epoch   = datetime(2026,1,1,0,0,0,'TimeZone','UTC'); % Start date
-T_total = 60 * 45;                                   % Total simulation time [s]
+T_total = 60 * 60;                                   % Total simulation time [s]
 t       = 0:IMU.dt:T_total;                          % Time vector [s]
 N       = numel(t);
 

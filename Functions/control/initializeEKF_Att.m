@@ -74,10 +74,10 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     %    errors (Scale Factor & Misalignment) during high-rate maneuvers.
     % 2. RRW (Bias): Aggressively inflated to widen the 3-sigma bounds,
     %    preventing covariance collapse and accommodating the transient
-    %    bias coupling caused by the 17 deg/s slew maneuver.
+    %    bias coupling caused by the slew maneuver.
     
     tuningFactorARW = 1e2;  % Keeps attitude NEES stable
-    tuningFactorRRW = 1e10; % NEW: Massive inflation to catch the bias spike
+    tuningFactorRRW = 1e10; % Massive inflation to catch the bias spike
     
     EKF.Q = zeros(6,6);
     EKF.Q(1:3, 1:3) = Q_base(1:3, 1:3) * tuningFactorARW;

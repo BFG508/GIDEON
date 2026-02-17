@@ -51,15 +51,9 @@
 %   - Diagnostic figures:  5 plots in Figures/ directory
 %
 % CONFIGURATION:
-%   Edit Section 1 (initializeSTR.m) for:
-%   - STR hardware specs
-%   - Mounting misalignment
-%   - Number of STRs
-%   - Noise levels
-%
-%   Edit Section 3 for:
-%   - Spacecraft true attitude
-%   - Spacecraft angular velocity
+%   - Sensor parameters:      Edit initializeSTR.m
+%   - Orbital elements:       Edit initializeOrbit.m
+%   - Spacecraft & Attitude:  Edit initializeSpacecraft.m
 
 % TRIAD vs. QUEST:
 % TRIAD advantages:
