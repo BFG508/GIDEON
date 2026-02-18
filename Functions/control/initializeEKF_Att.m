@@ -67,7 +67,7 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     % ====================================================================
 
     % Base noise from IMU specifications
-    Q_base = computeIMUNoise(IMU);
+    Q_base = computeIMUNoise_Att(IMU);
     
     % --- SPLIT COVARIANCE TUNING ---
     % 1. ARW (Attitude): Massively inflated to absorb dynamic unmodeled 

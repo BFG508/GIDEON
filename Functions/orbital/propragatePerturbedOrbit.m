@@ -42,7 +42,10 @@ function dy = propragatePerturbedOrbit(t, y, muEarth, REarth, J2Earth, wEarth, i
     yPos = rVec(2); 
     zPos = rVec(3);
     
-    %% --- 1. J2 Gravity Perturbation ---
+    %% ====================================================================
+    % 1. J2 GRAVITY PERTURBATION
+    % =====================================================================
+
     % Acceleration due to central body
     aG = -muEarth * rVec / rNorm^3;
     
@@ -56,9 +59,9 @@ function dy = propragatePerturbedOrbit(t, y, muEarth, REarth, J2Earth, wEarth, i
     aJ2(2) = J2Const * yPos * (5 * zSquared - 1); % y-component
     aJ2(3) = J2Const * zPos * (5 * zSquared - 3); % z-component
     
-    %% --- 2. Atmospheric Drag (NRLMSISE-00) ---
-    % Geodetic altitude check
-    % NRLMSISE-00 is valid up to ~ 1000 km, negligible above
+    %% ====================================================================
+    % 2. ATMOSPHERIC DRAG
+    % =====================================================================
     
     % Current simulation time
     currentTime = epoch + seconds(t);
@@ -109,7 +112,10 @@ function dy = propragatePerturbedOrbit(t, y, muEarth, REarth, J2Earth, wEarth, i
         aDrag = -1/2 * rho * inv_BC * norm(vRel) * vRel;
     end
     
-    %% --- 3. Solar Radiation Pressure (SRP) ---
+    %% ====================================================================
+    % 3. SOLAR RADIATION PRESSURE
+    % =====================================================================
+
     % Sun Position Vector
     rSun = sunPosition(currentTime);
     
@@ -142,7 +148,10 @@ function dy = propragatePerturbedOrbit(t, y, muEarth, REarth, J2Earth, wEarth, i
         aSRP = [0;0;0];
     end
     
-    %% --- 4. Total State Derivative ---
+    %% ====================================================================
+    % 4. TOTAL STATE DERIVATIVE
+    % =====================================================================
+
     dy = [                   vVec; 
           aG + aJ2 + aDrag + aSRP];
 end

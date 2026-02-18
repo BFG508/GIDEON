@@ -4,7 +4,7 @@ function EKF = updateMAG(EKF, BMeas, B_ECI)
 %            gain from innovation, updates error state and covariance, then
 %            applies correction to nominal quaternion and resets error state.
 %
-% INPUTS:
+% Inputs:
 %    EKF     - EKF structure with fields:
 %     .qNom  - Nominal attitude quaternion (4x1), ECI to Body
 %     .x     - Error state vector (6x1): [deltaTheta; biasGyro]
@@ -14,10 +14,10 @@ function EKF = updateMAG(EKF, BMeas, B_ECI)
 %    BMeas   - Measured magnetic field in body frame [nT] (3x1)
 %    B_ECI   - Reference magnetic field in ECI frame [nT] (3x1)
 %
-% OUTPUTS:
+% Outputs:
 %    EKF   - Updated EKF structure
 %
-% METHOD:
+% Method:
 %    1. Predict measurement: BPred = C(qNom) * B_ECI
 %    2. Compute innovation: y = BMeas - BPred
 %    3. Linearize via Jacobian H = [-[BPred]×, 0]
@@ -48,6 +48,7 @@ function EKF = updateMAG(EKF, BMeas, B_ECI)
     I     = eye(6);
     IKH   = I - K * H;
     EKF.P = IKH * EKF.P * IKH' + K * EKF.R_MAG * K';
+    EKF.P = (EKF.P + EKF.P') / 2;
     
     % --- 7. Apply Correction to Nominal Quaternion ---
     deltaQ    = smallAng2quat(EKF.x(1:3));

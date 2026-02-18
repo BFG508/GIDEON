@@ -4,7 +4,7 @@ function EKF = updateSTR(EKF, strMeas, nSTR)
 %            star pairs from all STR units, builds stacked measurement model,
 %            and performs batch Kalman update using cross-product residuals.
 %
-% INPUTS:
+% Inputs:
 %    EKF         - EKF structure with fields:
 %        .qNom   - Nominal attitude quaternion (4x1), ECI to Body
 %        .x      - Error state vector (6x1): [deltaTheta; biasGyro]
@@ -17,13 +17,13 @@ function EKF = updateSTR(EKF, strMeas, nSTR)
 %        .bVec   - Measured direction in body frame (3x1, unit vector)
 %    nSTR        - Number of star tracker units
 %
-% OUTPUTS:
+% Outputs:
 %    EKF         - Updated EKF structure with corrected:
 %        .qNom   - Nominal quaternion after attitude correction
 %        .x      - Error state (attitude error reset to zero)
 %        .P      - Updated error covariance
 %
-% METHOD:
+% Method:
 %    1. Collect all valid star measurements from all STR units
 %    2. For each star: compute cross-product residual y = s_meas × s_pred
 %    3. Project 3D residuals to 2D tangent plane (2 measurements per star)
@@ -105,6 +105,7 @@ function EKF = updateSTR(EKF, strMeas, nSTR)
     I     = eye(6);
     IKH   = I - K * H_Stack;
     EKF.P = IKH * EKF.P * IKH' + K * R_Stack * K';
+    EKF.P = (EKF.P + EKF.P') / 2;
     
     % --- 6. Apply Correction to Nominal Quaternion ---
     deltaQ   = smallAng2quat(EKF.x(1:3));

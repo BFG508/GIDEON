@@ -1,4 +1,4 @@
-function Phi = computeSTM(omega, dt)
+function Phi = computeSTM_Att(omega, dt)
 %==========================================================================
 % computeSTM: Computes State Transition Matrix (STM) for MEKF error state
 %             propagation using first-order discrete approximation.
@@ -16,7 +16,7 @@ function Phi = computeSTM(omega, dt)
 %    First-order discretization: Phi = I + F*dt
 %    
 %    F = [−[ω]×  −I₃]
-%        [ 0₃     0₃ ]
+%        [ 0₃     0₃]
 %    
 %    where [ω]× is the skew-symmetric matrix of angular velocity
 %

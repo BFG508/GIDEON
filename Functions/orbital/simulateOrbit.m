@@ -29,7 +29,9 @@ function [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams)
 %
 %==========================================================================
 
-    %% --- 1. Physical Constants (WGS84) ---
+    %% ====================================================================
+    % 1. PHYSICAL CONSTANTE (WGS84)
+    % =====================================================================
     muEarth = 3.986004418e14;  % [m^3/s^2]
     REarth  = 6378137.0;       % [m]
     J2Earth = 1.08262668e-3;   % J2 Zonal Harmonic
@@ -37,7 +39,9 @@ function [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams)
     PSun    = 4.56e-6;         % Solar Radiation Pressure at 1 AU [N/m^2]
     AU      = 149597870700;    % Astronomical Unit [m]
     
-    %% --- 2. Initial State Vector (COE -> ECI) ---
+    %% ====================================================================
+    % 2. INITIAL STATE VECTOR
+    % =====================================================================
     SMA  = orbitalElements.SMA;
     ECC  = orbitalElements.ECC;
     INC  = deg2rad(orbitalElements.INC);
@@ -67,7 +71,9 @@ function [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams)
     r0 = Q * rPQW;
     v0 = Q * vPQW;
     
-    %% --- 3. Numerical Integration (ode113) ---
+    %% ====================================================================
+    % 3. NUMERICAL INTEGRATION
+    % =====================================================================
     y0 = [r0; v0]; 
     opts = odeset('RelTol', 1e-12, 'AbsTol', 1e-5);
     

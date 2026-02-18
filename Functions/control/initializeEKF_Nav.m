@@ -4,25 +4,23 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
 %                     (PV-EKF) for spacecraft translational navigation.
 %
 % Inputs:
-%   IMU          - IMU parameter structure        (from initializeIMU.m)
-%   GNSS         - GNSS parameter structure       (from initializeGNSS.m)
-%   orbitalElems - Orbital elements structure     (from initializeOrbit.m)
+%   IMU  - IMU parameter structure       (from initializeIMU.m)
+%   GNSS - GNSS parameter structure      (from initializeGNSS.m)
 %
 % Outputs:
 %   EKF - EKF state structure with fields:
-%         .x      - Full state vector [9x1]: [r_ECI; v_ECI; biasAccel]
+%         .x      - Full state vector [9x1]: [rECI; vECI; biasAccel]
 %         .P      - Error covariance matrix [9x9]
 %         .Q      - Discrete process noise covariance [9x9]
 %         .R_GNSS - GNSS measurement noise covariance [6x6]
 %
 % PV-EKF State Definition:
-%   x = [r (3x1); v (3x1); b_a (3x1)]
+%   x = [r (3x1); v (3x1); bA (3x1)]
 %   where:
-%     r  : Position vector in ECI frame [m]
-%     v  : Velocity vector in ECI frame [m/s]
-%     b_a: Accelerometer dynamic bias in body frame [m/s²]
+%     r : Position vector in ECI frame [m]
+%     v : Velocity vector in ECI frame [m/s]
+%     bA: Accelerometer dynamic bias in body frame [m/s²]
 %==========================================================================
-
     fprintf('\n=== Initializing PV-EKF (Navigation) ===\n');
 
     % Extract sampling time
@@ -43,15 +41,15 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     % - Velocity: ~10 m/s initial uncertainty
     % - Accel Bias: ~0.05 m/s² initial uncertainty
     
-    sigma_r0 = 100.0; % [m]
-    sigma_v0 = 10.0;  % [m/s]
-    sigma_b0 = 0.05;  % [m/s²]
+    sigmaR0 = 100.0; % [m]
+    sigmaV0 = 10.0;  % [m/s]
+    sigmaB0 = 0.05;  % [m/s²]
     
-    P0_pos  = (sigma_r0^2) * eye(3);
-    P0_vel  = (sigma_v0^2) * eye(3);
-    P0_bias = (sigma_b0^2) * eye(3);
+    P0Pos  = (sigmaR0^2) * eye(3);
+    P0Vel  = (sigmaV0^2) * eye(3);
+    P0Bias = (sigmaB0^2) * eye(3);
     
-    EKF.P = blkdiag(P0_pos, P0_vel, P0_bias);
+    EKF.P = blkdiag(P0Pos, P0Vel, P0Bias);
     
     %% ===================================================================
     % 3. PROCESS NOISE COVARIANCE (Q)
@@ -59,16 +57,8 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     % Computes the continuous-time Power Spectral Density (PSD) of the 
     % process noise and discretizes it for the EKF propagation step.
     
-    g0 = 9.80665; % Standard gravity [m/s²]
-    
     % --- 3.1 Base Noise from IMU Datasheet ---
-    % Velocity Random Walk (VRW): Wideband noise on acceleration measuring
-    accelVRW_metric = (IMU.accel.VRW * 1e-6) * g0; % [m/s²/sqrt(Hz)]
-    q_vrw = accelVRW_metric^2;                     % PSD: [(m/s²)²/Hz]
-    
-    % Acceleration Random Walk (ARW): Random walk driving the bias drift
-    accelARW_metric = IMU.accel.ARW / sqrt(3600);  % [m/s²/sqrt(s)]
-    q_arw = accelARW_metric^2;                     % PSD: [(m/s²)²/Hz]
+    [qVRW, qARW] = computeIMUNoise_Nav(IMU);
     
     % --- 3.2 Process Noise Tuning Factors ---
     % Since the S/C operates in LEO, the orbital dynamics (gravity, drag) 
@@ -79,24 +69,24 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     tuningFactorVRW  = 1e0; % Inflate velocity uncertainty growth
     tuningFactorBias = 1e0; % Inflate bias random walk to track dynamics
     
-    Q_v = (q_vrw * tuningFactorVRW)  * eye(3);
-    Q_b = (q_arw * tuningFactorBias) * eye(3);
+    QV = (qVRW * tuningFactorVRW)  * eye(3);
+    QB = (qARW * tuningFactorBias) * eye(3);
     
     % --- 3.3 Discrete-time Q Matrix Approximation ---
     % For a standard PV-EKF, process noise enters through velocity (accel 
     % integration) and bias states. Position noise is coupled via velocity.
     % Simplified diagonal discrete approximation: Q_d ≈ Q_c * dt
     
-    Q_pos_discrete = (1/3) * Q_v * dt^3; % Position integration noise
-    Q_vel_discrete = Q_v * dt;           % Velocity integration noise
-    Q_bias_discrete = Q_b * dt;          % Bias random walk noise
+    QPos_discrete  = (1/3) * QV * dt^3; % Position integration noise
+    QVel_discrete  = QV * dt;           % Velocity integration noise
+    QBias_discrete = QB * dt;           % Bias random walk noise
     
-    EKF.Q = blkdiag(Q_pos_discrete, Q_vel_discrete, Q_bias_discrete);
+    EKF.Q = blkdiag(QPos_discrete, QVel_discrete, QBias_discrete);
     
     fprintf(' Process noise (Q_discrete) - Tuned:\n');
-    fprintf('   - Position integr: %.2e m²\n', EKF.Q(1,1));
-    fprintf('   - VRW (velocity):  %.2e (m/s)²\n', EKF.Q(4,4));
-    fprintf('   - ARW (bias RW):   %.2e (m/s²)²\n', EKF.Q(7,7));
+    fprintf('   - Position integrated: %.2e m²\n', EKF.Q(1,1));
+    fprintf('   - VRW (Velocity)     :  %.2e (m/s)²\n', EKF.Q(4,4));
+    fprintf('   - ARW (Bias RW)      :   %.2e (m/s²)²\n', EKF.Q(7,7));
     
     %% ===================================================================
     % 4. MEASUREMENT NOISE COVARIANCE (R)
@@ -109,15 +99,15 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     % overconfident during correlated ephemeris/ionosphere drifts.
     
     % Position measurement variance (White + GM)
-    var_pos = GNSS.sigmaPosWhite^2 + GNSS.sigmaPosGM^2;
+    varPos = GNSS.sigmaPosWhite^2 + GNSS.sigmaPosGM^2;
     
     % Velocity measurement variance (White + GM)
-    var_vel = GNSS.sigmaVelWhite^2 + GNSS.sigmaVelGM^2;
+    varVel = GNSS.sigmaVelWhite^2 + GNSS.sigmaVelGM^2;
     
-    R_pos = var_pos * eye(3);
-    R_vel = var_vel * eye(3);
+    RPos = varPos * eye(3);
+    RVel = varVel * eye(3);
     
-    EKF.R_GNSS = blkdiag(R_pos, R_vel);
+    EKF.R_GNSS = blkdiag(RPos, RVel);
     
     fprintf('\n Measurement noise (R) - GNSS (White + GM Inflated):\n');
     fprintf('   - Position: %.2f m² (Sigma: %.2f m)\n', EKF.R_GNSS(1,1), sqrt(EKF.R_GNSS(1,1)));

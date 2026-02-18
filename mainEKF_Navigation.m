@@ -16,7 +16,7 @@
 %   and lever-arm kinematic disturbances.
 %
 % ALGORITHM:
-%   The PV-EKF estimates a 9-state vector: x = [rECI; vECI; baccel]
+%   The PV-EKF estimates a 9-state vector: x = [rECI; vECI; bAccel]
 %     1. Prediction: Integrates orbital dynamics and adds the rotated IMU 
 %        specific force to propagate the state. Propagates the covariance 
 %        matrix (P) using the state transition matrix (Φ) and tuned process 
@@ -80,7 +80,7 @@ orbitalElems          = initializeOrbit(epoch);
 groundTruth = generateGroundTruth(t, epoch, orbitalElems, scParams, attParams);
 
 % Extract truth variables for convenience
-qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body),          4xN
+qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body)         , 4xN
 omegaTrue   = groundTruth.omegaTrue; % Angular velocity (Body frame)      [rad/s], 3xN
 rECI        = groundTruth.rECI;      % Position in ECI                    [m],     3xN
 vECI        = groundTruth.vECI;      % Velocity in ECI                    [m/s],   3xN
@@ -134,7 +134,7 @@ vEst(:,1)    = EKF.x(4:6);
 biasEst(:,1) = EKF.x(7:9);
 PHist(:,:,1) = EKF.P;
 
-% GNSS update step interval (e.g., 120 samples if IMU=120Hz and GNSS=1Hz)
+% GNSS update step interval (e.g., 120 samples if IMU = 120Hz and GNSS = 1Hz)
 gnssStep = round(IMU.rate * GNSS.dt);
 
 for k = 2:N

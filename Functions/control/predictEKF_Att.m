@@ -10,12 +10,11 @@ function EKF = predictEKF_Att(EKF, omegaMeas, dt)
 %        .x    - Error state vector (6x1): [deltaTheta; biasGyro]
 %        .P    - Error state covariance matrix (6x6)
 %        .Q    - Process noise covariance matrix (6x6)
-%
 %    omegaMeas - Measured angular velocity from gyroscope [rad/s] (3x1)
 %    dt        - Time step [s]
 %
 % Outputs:
-%    ekf        - Updated EKF structure propagated.
+%    EKF        - Updated EKF structure propagated.
 %==========================================================================
 
     % --- 1. Propagate nominal quaternion with bias-corrected gyro ---
@@ -23,7 +22,7 @@ function EKF = predictEKF_Att(EKF, omegaMeas, dt)
     EKF.qNom       = quatint(EKF.qNom, omegaCorrected, dt);
     
     % --- 2. Propagate error covariance: P = Φ*P*Φ' + Q ---
-    Phi   = computeSTM(omegaCorrected, dt);
+    Phi   = computeSTM_Att(omegaCorrected, dt);
     EKF.P = Phi * EKF.P * Phi' + EKF.Q * dt;
     EKF.P = (EKF.P + EKF.P') / 2;
 end

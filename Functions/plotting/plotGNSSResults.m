@@ -293,13 +293,14 @@ function fig = plotGNSSResults(t, truth, meas, GNSS, saveFlag)
     hasImage = false;
     try
         earthImg = imread('Data\blueMarble.jpg');
+        earthImg = imresize(earthImg, [1024, 2048]);
         hasImage = true;
     catch
         warning('Could not find "blueMarble.jpg".');
     end
     
     % ---------------------------------------------------------
-    % Subplot 1: 2D Projection (Equirectangular Map)
+    % Subplot 1: 2D Projection
     % ---------------------------------------------------------
     ax1 = nexttile;
     hold(ax1, 'on');
