@@ -85,9 +85,8 @@ omegaTrue   = groundTruth.omegaTrue; % Angular velocity (Body frame)      [rad/s
 rECI        = groundTruth.rECI;      % Position in ECI                    [m],     3xN
 vECI        = groundTruth.vECI;      % Velocity in ECI                    [m/s],   3xN
 
-% Compute specific force for accelerometer (1g assumption for static-like tuning)
-g0             = 9.80665;                   % [m/s²]
-forceTrue_body = repmat([0; 0; -g0], 1, N); % [m/s²]
+% Compute specific force for accelerometer
+forceTrue_body = zeros(3, N);
 
 fprintf('=== Truth Generation Complete ===\n');
 
@@ -166,6 +165,7 @@ fprintf('=== PV-EKF Propagation Complete ===\n');
 
 % Generate comprehensive validation plots
 saveFlag = 1;
-plotEKF_NavResults(t, groundTruth, rEst, vEst, biasEst, PHist, saveFlag);
+close all;
+plotEKF_NavResults(t, groundTruth, rEst, vEst, biasEst, PHist, imuMeas, saveFlag);
 
 fprintf('\n=== All tasks completed successfully ===\n');

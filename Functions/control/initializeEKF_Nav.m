@@ -21,6 +21,7 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
 %     v : Velocity vector in ECI frame [m/s]
 %     bA: Accelerometer dynamic bias in body frame [m/s²]
 %==========================================================================
+
     fprintf('\n=== Initializing PV-EKF (Navigation) ===\n');
 
     % Extract sampling time
@@ -76,17 +77,22 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     % For a standard PV-EKF, process noise enters through velocity (accel 
     % integration) and bias states. Position noise is coupled via velocity.
     % Simplified diagonal discrete approximation: Q_d ≈ Q_c * dt
+    Q11 = 1/3 * QV * dt^3; % Position noise variance
+    Q12 = 1/2 * QV * dt^2; % Position-Velocity cross-correlation
+    Q21 = Q12;
+    Q22 = QV * dt;         % Velocity noise variance
+    Q33 = QB * dt;         % Bias Random Walk variance
     
-    QPos_discrete  = (1/3) * QV * dt^3; % Position integration noise
-    QVel_discrete  = QV * dt;           % Velocity integration noise
-    QBias_discrete = QB * dt;           % Bias random walk noise
+    O3 = zeros(3,3);
     
-    EKF.Q = blkdiag(QPos_discrete, QVel_discrete, QBias_discrete);
+    EKF.Q = [Q11, Q12,  O3;
+             Q21, Q22,  O3;
+              O3,  O3, Q33];
     
     fprintf(' Process noise (Q_discrete) - Tuned:\n');
     fprintf('   - Position integrated: %.2e m²\n', EKF.Q(1,1));
-    fprintf('   - VRW (Velocity)     :  %.2e (m/s)²\n', EKF.Q(4,4));
-    fprintf('   - ARW (Bias RW)      :   %.2e (m/s²)²\n', EKF.Q(7,7));
+    fprintf('   - VRW (Velocity)     : %.2e (m/s)²\n', EKF.Q(4,4));
+    fprintf('   - ARW (Bias RW)      : %.2e (m/s²)²\n', EKF.Q(7,7));
     
     %% ===================================================================
     % 4. MEASUREMENT NOISE COVARIANCE (R)

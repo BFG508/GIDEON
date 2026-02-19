@@ -47,7 +47,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
             mkdir(saveDir);
             fprintf('\n✓ Created directory: %s\n', saveDir);
         end
-        fprintf('\n--- Saving EKF figures ---\n');
+        fprintf('\n--- Saving MEKF figures ---\n');
     end
     
     % Compute errors

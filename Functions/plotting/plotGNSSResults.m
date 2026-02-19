@@ -34,7 +34,8 @@ function fig = plotGNSSResults(t, truth, meas, GNSS, saveFlag)
 %   2) Velocity Error (X, Y, Z, Norm) vs Antenna Truth
 %   3) Gauss-Markov Correlated Bias Evolution
 %   4) Lever Arm Kinematic Disturbance (Attitude-Translation coupling)
-%   5) Visible Satellites and 3D Orbit trajectory
+%   5) Visible Satellites
+%   6) 3D Orbit trajectory & 2D Projection
 %==========================================================================
 
     % Handle optional saveFlag
@@ -43,7 +44,7 @@ function fig = plotGNSSResults(t, truth, meas, GNSS, saveFlag)
     end
     
     nFig = 0;
-    fig  = gobjects(5, 1);
+    fig  = gobjects(6, 1);
     
     % Time in minutes for better X-axis readability
     tMin = t / 60;
@@ -85,7 +86,7 @@ function fig = plotGNSSResults(t, truth, meas, GNSS, saveFlag)
         ax = nexttile;
         hold(ax, 'on');
         
-        plot(ax, tMin,              errPos(i,:), 'b-', 'LineWidth', 1.0, 'DisplayName', 'Error');
+        plot(ax, tMin,              errPos(i,:),  'b-', 'LineWidth', 1.0, 'DisplayName', 'Error');
         plot(ax, tMin,  sigmaPos3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', '\pm3σ');
         plot(ax, tMin, -sigmaPos3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
         
@@ -133,7 +134,7 @@ function fig = plotGNSSResults(t, truth, meas, GNSS, saveFlag)
         ax = nexttile;
         hold(ax, 'on');
         
-        plot(ax, tMin,              errVel(i,:), 'b-', 'LineWidth', 1.0, 'DisplayName', 'Error');
+        plot(ax, tMin,              errVel(i,:),  'b-', 'LineWidth', 1.0, 'DisplayName', 'Error');
         plot(ax, tMin,  sigmaVel3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', '\pm3σ');
         plot(ax, tMin, -sigmaVel3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
         
