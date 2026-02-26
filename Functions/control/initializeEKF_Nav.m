@@ -67,22 +67,26 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     % coupling inject unmodeled perturbations. We inflate Q slightly to 
     % keep the filter "awake" and prevent covariance collapse.
     
+    tuningFactorPos  = 2e0;
     tuningFactorVRW  = 1e0; % Inflate velocity uncertainty growth
-    tuningFactorBias = 1e0; % Inflate bias random walk to track dynamics
+    tuningFactorBias = 2e1; % Inflate bias random walk to track dynamics
     
     QV = (qVRW * tuningFactorVRW)  * eye(3);
     QB = (qARW * tuningFactorBias) * eye(3);
+
+    Q_GM_Pos = tuningFactorPos * (2 * GNSS.sigmaPosGM^2 / GNSS.tauPos) * dt * eye(3);
+    Q_GM_Vel = tuningFactorVRW * (2 * GNSS.sigmaVelGM^2 / GNSS.tauVel) * dt * eye(3);
     
     % --- 3.3 Discrete-time Q Matrix Approximation ---
     % For a standard PV-EKF, process noise enters through velocity (accel 
     % integration) and bias states. Position noise is coupled via velocity.
     % Simplified diagonal discrete approximation: Q_d ≈ Q_c * dt
-    Q11 = 1/3 * QV * dt^3; % Position noise variance
-    Q12 = 1/2 * QV * dt^2; % Position-Velocity cross-correlation
+    Q11 = 1/3 * QV * dt^3 + Q_GM_Pos; % Position noise variance
+    Q12 = 1/2 * QV * dt^2;            % Position-Velocity cross-correlation
     Q21 = Q12;
-    Q22 = QV * dt;         % Velocity noise variance
-    Q33 = QB * dt;         % Bias Random Walk variance
-    
+    Q22 = QV * dt + Q_GM_Vel;         % Velocity noise variance
+    Q33 = QB * dt;                    % Bias Random Walk variance
+
     O3 = zeros(3,3);
     
     EKF.Q = [Q11, Q12,  O3;
@@ -116,8 +120,8 @@ function EKF = initializeEKF_Nav(IMU, GNSS)
     EKF.R_GNSS = blkdiag(RPos, RVel);
     
     fprintf('\n Measurement noise (R) - GNSS (White + GM Inflated):\n');
-    fprintf('   - Position: %.2f m² (Sigma: %.2f m)\n', EKF.R_GNSS(1,1), sqrt(EKF.R_GNSS(1,1)));
-    fprintf('   - Velocity: %.4f (m/s)² (Sigma: %.3f m/s)\n', EKF.R_GNSS(4,4), sqrt(EKF.R_GNSS(4,4)));
+    fprintf('   - Position: %.2f m² (σ: %.2f m)\n', EKF.R_GNSS(1,1), sqrt(EKF.R_GNSS(1,1)));
+    fprintf('   - Velocity: %.4f (m/s)² (σ: %.3f m/s)\n', EKF.R_GNSS(4,4), sqrt(EKF.R_GNSS(4,4)));
     
     fprintf('=== PV-EKF Initialization Complete ===\n');
 

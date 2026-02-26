@@ -74,7 +74,7 @@ MAG = initializeMAG();
 
 % Simulation time settings
 epoch   = datetime(2026,1,1,0,0,0,'TimeZone','UTC'); % Start date
-T_total = 60 * 60;                                   % Total simulation time [s]
+T_total = 4 * 60 * 60;                               % Total simulation time [s]
 t       = 0:MAG.dt:T_total;                          % Time vector [s]
 N       = numel(t);
 

@@ -199,7 +199,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     nFig = nFig + 1;
     fig(nFig) = figure('Name', 'MEKF - Uncertainty Evolution', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [450, 450, 900, 600]);
+                       'Position', [450, 150, 900, 800]);
                    
     % --- CREATE TILED LAYOUT ---
     tLayout = tiledlayout(2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
@@ -215,7 +215,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     plot(ax1, t/60, 3*sigmaAtt(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Pitch');
     plot(ax1, t/60, 3*sigmaAtt(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Yaw');
     
-    ylabel(ax1, '3σ Uncertainty [deg]', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel(ax1, '3σ Attitude Uncertainty [deg]', 'FontSize', 10, 'FontWeight', 'bold');
     title(ax1, 'Attitude Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
     
     set(ax1, 'FontSize', 10); 
@@ -232,11 +232,11 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     ax2 = nexttile;
     hold(ax2, 'on');
     
-    plot(ax2, t/60, 3*sigmaBias(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'X-axis');
-    plot(ax2, t/60, 3*sigmaBias(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Y-axis');
-    plot(ax2, t/60, 3*sigmaBias(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Z-axis');
+    plot(ax2, t/60, 3*sigmaBias(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'x');
+    plot(ax2, t/60, 3*sigmaBias(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'y');
+    plot(ax2, t/60, 3*sigmaBias(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'z');
     
-    ylabel(ax2, '3σ Uncertainty [deg/h]', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel(ax2, '3σ Gyroscope Bias Uncertainty [deg/h]', 'FontSize', 10, 'FontWeight', 'bold');
     title(ax2, 'Gyroscope Bias Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
     
     set(ax2, 'FontSize', 10); 
@@ -291,8 +291,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     ax1 = nexttile;
     hold(ax1, 'on');
     
-    plot(ax1, t/60, NEESatt, 'b-', 'LineWidth', 1.5, 'DisplayName', 'NEES');
-    
+    plot(ax1, t/60,          NEESatt, 'b-', 'LineWidth', 1.5, 'DisplayName', 'NEES');
     plot(ax1, t/60, r2*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', '95% CI');
     plot(ax1, t/60, r1*ones(size(t)), 'r--', 'LineWidth', 1.2, 'HandleVisibility', 'off');
     
@@ -306,7 +305,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     hold(ax2, 'on');
     
     avgNEES = cumsum(NEESatt) ./ (1:N);
-    plot(ax2, t/60, avgNEES, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Average NEES');
+    plot(ax2, t/60,         avgNEES,  'b-', 'LineWidth', 1.5, 'DisplayName', 'Average NEES');
     plot(ax2, t/60, 3*ones(size(t)), 'r--', 'LineWidth', 1.2, 'DisplayName', 'Expected (3 DOF)');
     
     ylabel(ax2, 'Average NEES', 'FontSize', 10, 'FontWeight', 'bold');
@@ -318,9 +317,6 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     title(tLayout, sprintf('Attitude Normalized Estimation Error Squared | %.1f%% inside 95%% CI', inside), ...
           'FontSize', 14, 'FontWeight', 'bold');
     xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
-    
-    % lgd = legend(ax1, 'Orientation', 'horizontal', 'FontSize', 11);
-    % lgd.Layout.Tile = 'north';
     
     if saveFlag
         saveFigure(fig(nFig), saveDir, 'EKF_fig5_NEES_consistency');
@@ -411,7 +407,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     nFig = nFig + 1;
     fig(nFig) = figure('Name', 'EKF - Error Statistics', ...
                        'Color', 'w', 'NumberTitle', 'off', ...
-                       'Position', [500, 150, 1000, 800]);
+                       'Position', [500, 150, 1000, 600]);
     
     % Compute statistics
     stats.attMean  = mean(abs(attErrorDeg), 2);
@@ -435,8 +431,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     h(3) = bar(x + 0.5*width, stats.attRms, width, 'DisplayName', 'RMS');
     h(4) = bar(x + 1.5*width, stats.attMax, width, 'DisplayName', 'Max');
     
-    ylabel('Error [deg]', 'FontSize', 11, 'FontWeight', 'bold');
-    title('Attitude Error Statistics', 'FontSize', 12, 'FontWeight', 'bold');
+    ylabel('Attitude Error [deg]', 'FontSize', 11, 'FontWeight', 'bold');
     grid on;
     set(gca, 'XTick', 1:3, 'XTickLabel', {'Roll', 'Pitch', 'Yaw'}, 'FontSize', 10);
     
@@ -447,8 +442,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
     bar(x + 0.5*width, stats.biasRms, width);
     bar(x + 1.5*width, stats.biasMax, width);
     
-    ylabel('Error [deg/h]', 'FontSize', 11, 'FontWeight', 'bold');
-    title('Gyro Bias Error Statistics', 'FontSize', 12, 'FontWeight', 'bold');
+    ylabel('Gyroscope Bias Error [deg/h]', 'FontSize', 11, 'FontWeight', 'bold');
     grid on;
     set(gca, 'XTick', 1:3, 'XTickLabel', {'X', 'Y', 'Z'}, 'FontSize', 10);
     

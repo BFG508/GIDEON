@@ -45,7 +45,7 @@ function truth = generateGroundTruth(t, epoch, orbitalElements, scParams, attPar
     %% 1. Orbital propagation
     fprintf(' Propagating orbit ... ');
     [rECI, vECI] = simulateOrbit(t, orbitalElements, scParams);
-    fprintf('Done.\n');
+    fprintf('                     Done.\n');
     
     %% 2. Geomagnetic Field (IGRF-13)
     fprintf(' Simulating geomagnetic field (IGRF-13) ... ');
@@ -58,13 +58,13 @@ function truth = generateGroundTruth(t, epoch, orbitalElements, scParams, attPar
     for k = 1:N
         sunPos(:,k) = sunPosition(epoch + seconds(t(k)));
     end
-    fprintf('Done.\n');
+    fprintf('               Done.\n');
     
     %% 4. Attitude Dynamics
     fprintf(' Integrating attitude dynamics ... ');
     [qTrue, omegaTrue, torques] = simulateAttitude(t, rECI, vECI, B_ECI, sunPos, attParams, scParams, epoch);
-    fprintf('Done.\n');
-    
+    fprintf('         Done.\n');
+ 
     %% 5. Assemble Output
     truth.t         = t;
     truth.rECI      = rECI;

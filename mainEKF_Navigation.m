@@ -80,10 +80,10 @@ orbitalElems          = initializeOrbit(epoch);
 groundTruth = generateGroundTruth(t, epoch, orbitalElems, scParams, attParams);
 
 % Extract truth variables for convenience
-qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body)         , 4xN
-omegaTrue   = groundTruth.omegaTrue; % Angular velocity (Body frame)      [rad/s], 3xN
-rECI        = groundTruth.rECI;      % Position in ECI                    [m],     3xN
-vECI        = groundTruth.vECI;      % Velocity in ECI                    [m/s],   3xN
+qTrue       = groundTruth.qTrue;     % Attitude quaternion (ECI to Body)        , 4xN
+omegaTrue   = groundTruth.omegaTrue; % Angular velocity (Body frame)     [rad/s], 3xN
+rECI        = groundTruth.rECI;      % Position in ECI                       [m], 3xN
+vECI        = groundTruth.vECI;      % Velocity in ECI                     [m/s], 3xN
 
 % Compute specific force for accelerometer
 forceTrue_body = zeros(3, N);
@@ -111,7 +111,7 @@ fprintf('=== Sensor Data Generation Complete ===\n');
 EKF = initializeEKF_Nav(IMU, GNSS);
 
 % Initialize filter states with the very first GNSS measurement
-% Assuming first measurement is available at t=0
+% Assuming first measurement is available at t = 0
 EKF.x(1:3) = gnssMeas.rECI(:,1);
 EKF.x(4:6) = gnssMeas.vECI(:,1);
 EKF.x(7:9) = zeros(3,1); % Initial guess for accel bias is 0
@@ -133,15 +133,13 @@ vEst(:,1)    = EKF.x(4:6);
 biasEst(:,1) = EKF.x(7:9);
 PHist(:,:,1) = EKF.P;
 
-% GNSS update step interval (e.g., 120 samples if IMU = 120Hz and GNSS = 1Hz)
-gnssStep = round(IMU.rate * GNSS.dt);
 
 for k = 2:N
-    % 1) Prediction Step (Integrate orbit + IMU accel at high rate)
+    % 1) Prediction Step  (Accel propagation at IMU rate)
     EKF = predictEKF_Nav(EKF, imuMeas.accel.forceBody(:,k), qTrue(:,k), IMU.dt);
     
-    % 2) Correction Step (GNSS update at low rate)
-    if mod(k - 1, gnssStep) == 0
+    % 2) Correction Step (GNSS update at 1 Hz)
+    if mod(k - 1, round(IMU.rate * GNSS.dt)) == 0
         EKF = updateGNSS(EKF, gnssMeas.rECI(:,k), gnssMeas.vECI(:,k), ...
                          GNSS.leverArm, qTrue(:,k), omegaTrue(:,k));
     end
@@ -165,7 +163,6 @@ fprintf('=== PV-EKF Propagation Complete ===\n');
 
 % Generate comprehensive validation plots
 saveFlag = 1;
-close all;
 plotEKF_NavResults(t, groundTruth, rEst, vEst, biasEst, PHist, imuMeas, saveFlag);
 
 fprintf('\n=== All tasks completed successfully ===\n');
