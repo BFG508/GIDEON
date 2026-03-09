@@ -5,3 +5,7 @@
 
 # Autosave of MATLAB
 *.asv
+
+# Figure files
+*.fig
+*.svg

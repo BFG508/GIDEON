@@ -18,24 +18,27 @@ A comprehensive, high-fidelity 3D simulation framework for spacecraft Guidance, 
 * **Magnetometer (MAG):** Simulates 3-axis magnetic field measurements with hard/soft iron deterministic errors, non-orthogonality, and bias instability.
 
 ### 4. Rigorous Statistical Analysis
-* Automatically computes and plots estimation errors against $\pm3\sigma$ covariance bounds.
+* Automatically computes and plots estimation errors against ±3σ covariance bounds.
 * Evaluates filter consistency using the Normalized Estimation Error Squared (NEES) for chi-squared confidence intervals.
 
-## 📂 Repository Structure
-The suite is modularly divided into several executable `main*.m` scripts. Run any of these to execute a specific simulation:
-* `mainEKF_Navigation.m`: Runs the PV-EKF for orbital position, velocity, and accelerometer bias estimation.
-* `mainEKF_Attitude.m`: Runs the MEKF for 3D orientation and gyroscope bias estimation.
-* `mainQUEST.m`: Validates Star Tracker attitude determination using the QUEST algorithm.
-* `mainTRIAD.m`: Validates Star Tracker attitude determination using the TRIAD algorithm.
-* `mainIMU.m`: Generates IMU measurements and performs Allan Variance analysis for drift characterization.
-* `mainGNSS.m`: Simulates GNSS measurements and analyzes the Lever Arm effect and Gauss-Markov noise.
-* `mainMAG.m`: Simulates environmental magnetic fields and magnetometer errors.
-
 ## 🛠️ Technology Stack
-This project is built entirely in **MATLAB**, utilizing its core matrix manipulation and plotting capabilities. It does not strictly require any external or paid toolboxes, as all quaternion mathematics, Jacobian matrices, sensor kinematic models, and eigenvalue decompositions are explicitly coded from scratch.
+This project uses **MATLAB** to perform high-fidelity 3D simulations, matrix manipulations, and complex filtering algorithms. While the core GNC algorithms (MEKF, PV-EKF, QUEST, TRIAD) and quaternion mathematics are explicitly coded from scratch without external dependencies, the **Aerospace Toolbox** is utilized exclusively to generate the rigorous environmental ground truth (such as the IGRF-13 magnetic field model and NRLMSISE-00 atmospheric density).
 
-## ⚙️ How to Run
-1. Clone the repository to your local machine.
-2. Open MATLAB and navigate to the project root directory.
-3. Open any of the `main*.m` scripts (e.g., `mainEKF_Navigation.m`) and click **Run**.
-4. The simulation will generate the ground truth, synthesize the respective sensor data, execute the algorithms, and automatically spawn comprehensive diagnostic figures.
+## 📂 Repository Structure
+* `/Data` - Stores the cached Hipparcos Stellar Catalog used for the Star Tracker simulations.
+* `/Documentation` - Mathematical derivations, algorithm formulations, and academic references.
+* `/Figures` - Destination folder for the automatically generated diagnostic plots and performance metrics (saved in `.fig`, `.png`, and `.svg` formats).
+* `/Functions` - Helper functions containing all core mathematical operations, quaternion kinematics, state transition matrices, Jacobians, and environmental models.
+* `mainEKF_*.m` - Main executable scripts for the Multiplicative EKF (Attitude) and Position-Velocity EKF (Navigation).
+* `mainQUEST.m` & `mainTRIAD.m` - Executable scripts to validate the static attitude determination algorithms.
+* `mainGNSS.m`, `mainIMU.m`, `mainMAG.m` - Executable scripts to synthesize sensor measurements, characterize noise (e.g., Allan Variance), and validate error models.
+
+## ⚙️ Installation & Usage
+Since this project is developed entirely in MATLAB, no external compilation or complex dependency management is required. 
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/BFG508/GIDEON.git
+2. **Open MATLAB** and navigate to the cloned `GIDEON` directory.
+3. **Add to Path**: Ensure that all subdirectories (`/Functions` and `/Data`) are added to your MATLAB path so the main scripts can access the helper functions and the stellar catalog. You can do this by right-clicking the `GIDEON` folder in the Current Folder browser and selecting Add to Path > Selected Folders and Subfolders.
+4. **Run the Analysis**: Open and run any of the `main*.m` scripts located in the root directory. The scripts will automatically generate the orbital and attitude ground truth, synthesize the respective sensor data with noise, execute the estimation algorithms, and spawn comprehensive diagnostic figures.
