@@ -1,5 +1,5 @@
 # G.I.D.E.O.N. 🛰️
-**GU**idance & **I**nertial **D**etermination **E**stimator for **O**rbital **N**avigation
+**G**uidance & **I**nertial **D**etermination **E**stimator for **O**rbital **N**avigation
 
 A comprehensive, high-fidelity 3D simulation framework for spacecraft Guidance, Navigation, and Control (GNC) written entirely in MATLAB. This repository provides a complete suite of algorithms for translational navigation, attitude estimation, static attitude determination, and rigorous sensor error modeling.
 
