@@ -7,31 +7,32 @@
 %   navigation using an Extended Kalman Filter (PV-EKF). This script fuses 
 %   high-rate inertial data (IMU) with low-rate Position, Velocity, and Time 
 %   observations from a GNSS receiver to estimate the spacecraft's true orbital
-%   state and dynamic accelerometer bias.
+%   state, dynamic accelerometer bias, and correlated GNSS errors.
 %
 % PURPOSE:
 %   Demonstrates state-of-the-art translational sensor fusion for S/C AOCS/GNC.
 %   Validates orbital propagation inside the filter, covariance bounding, 
-%   and the filter's ability to reject GNSS correlated noise (Gauss-Markov)
-%   and lever-arm kinematic disturbances.
+%   and the filter's ability to explicitly estimate and reject GNSS correlated 
+%   noise (Gauss-Markov) and lever-arm kinematic disturbances.
 %
 % ALGORITHM:
-%   The PV-EKF estimates a 9-state vector: x = [rECI; vECI; bAccel]
+%   The PV-EKF estimates a 15-state vector: x = [rECI; vECI; bAccel; rGM; vGM]
 %     1. Prediction: Integrates orbital dynamics and adds the rotated IMU 
-%        specific force to propagate the state. Propagates the covariance 
-%        matrix (P) using the state transition matrix (Φ) and tuned process 
-%        noise (Q).
+%        specific force to propagate the kinematic state. Propagates the 
+%        Gauss-Markov error states via analytical exponential decay. 
+%        Propagates the covariance matrix (P) using the expanded state 
+%        transition matrix (Φ) and tuned process noise (Q).
 %     2. Update: When GNSS measurements arrive (typically 1 Hz), computes 
-%        the Kalman Gain (K) to update position and velocity, while 
-%        simultaneously estimating the accelerometer bias.
+%        the Kalman Gain (K) to update position, velocity, accelerometer 
+%        bias, and the internally estimated GNSS correlated errors.
 %
 % WORKFLOW:
 %   1. Initialize hardware parameters (IMU and GNSS)
 %   2. Generate ground truth trajectory (LEO orbit, Nadir-pointing attitude)
 %   3. Simulate multi-rate noisy sensor measurements (including Lever Arm)
-%   4. Initialize PV-EKF (Uses first GNSS fix for initial state)
+%   4. Initialize 15-state PV-EKF (Uses first GNSS fix for initial state)
 %   5. Execute EKF loop (Predict @ 120Hz, Update GNSS @ 1Hz)
-%   6. Validate results: Position/Velocity errors, bias drift, NEES
+%   6. Validate results: Position/Velocity errors, bias drift, GM estimates, NEES
 %   7. Generate diagnostic plots
 %
 % CONFIGURATION:
@@ -115,6 +116,8 @@ EKF = initializeEKF_Nav(IMU, GNSS);
 EKF.x(1:3) = gnssMeas.rECI(:,1);
 EKF.x(4:6) = gnssMeas.vECI(:,1);
 EKF.x(7:9) = zeros(3,1); % Initial guess for accel bias is 0
+EKF.x(10:12) = zeros(3,1); % Initial guess for GNSS GM Position error is 0
+EKF.x(13:15) = zeros(3,1); % Initial guess for GNSS GM Velocity error is 0
 
 %% ========================================================================
 % 5. EKF PROPAGATION AND UPDATE LOOP
@@ -126,17 +129,21 @@ fprintf('\n=== Running PV-EKF ===\n');
 rEst         = zeros(3,N);
 vEst         = zeros(3,N);
 biasEst      = zeros(3,N);
-PHist        = zeros(9,9,N);
+rGMEst       = zeros(3,N);
+vGMEst       = zeros(3,N);
+PHist        = zeros(15,15,N);
 
 rEst(:,1)    = EKF.x(1:3);
 vEst(:,1)    = EKF.x(4:6);
 biasEst(:,1) = EKF.x(7:9);
+rGMEst(:,1)  = EKF.x(10:12);
+vGMEst(:,1)  = EKF.x(13:15);
 PHist(:,:,1) = EKF.P;
 
 
 for k = 2:N
     % 1) Prediction Step  (Accel propagation at IMU rate)
-    EKF = predictEKF_Nav(EKF, imuMeas.accel.forceBody(:,k), qTrue(:,k), IMU.dt);
+    EKF = predictEKF_Nav(EKF, imuMeas.accel.forceBody(:,k), qTrue(:,k), IMU.dt, GNSS);
     
     % 2) Correction Step (GNSS update at 1 Hz)
     if mod(k - 1, round(IMU.rate * GNSS.dt)) == 0
@@ -148,6 +155,8 @@ for k = 2:N
     rEst(:,k)    = EKF.x(1:3);
     vEst(:,k)    = EKF.x(4:6);
     biasEst(:,k) = EKF.x(7:9);
+    rGMEst(:,k)  = EKF.x(10:12);
+    vGMEst(:,k)  = EKF.x(13:15);
     PHist(:,:,k) = EKF.P;
     
     % 4) Progress indicator
@@ -163,6 +172,7 @@ fprintf('=== PV-EKF Propagation Complete ===\n');
 
 % Generate comprehensive validation plots
 saveFlag = 1;
-plotEKF_NavResults(t, groundTruth, rEst, vEst, biasEst, PHist, imuMeas, saveFlag);
+plotEKF_NavResults(t, groundTruth, rEst, vEst, biasEst, rGMEst, vGMEst, ...
+                   PHist, imuMeas, saveFlag);
 
 fprintf('\n=== All tasks completed successfully ===\n');

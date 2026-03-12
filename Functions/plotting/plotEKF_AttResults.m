@@ -64,9 +64,8 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
         attErrorDeg(:,k) = rad2deg(eulerErrorRad);
     end
     
-    % Gyro bias error (assume true bias = 0)
-    biasTrue = zeros(3, N);
-    biasErr  = rad2deg(biasEst - biasTrue) * 3600;
+    % Gyro bias error
+    biasErr  = rad2deg(biasEst - imuMeas.gyro.biasDyn) * 3600;
     
     % Extract uncertainty (1σ) from covariance
     sigmaAtt  = zeros(3, N);
@@ -284,7 +283,7 @@ function fig = plotEKF_AttResults(t, truth, qEst, biasEst, PHist, imuMeas, saveF
 
     % Percentage inside bounds
     inside = sum(NEESatt > r1 & NEESatt < r2) / N * 100;
-
+    
     tLayout = tiledlayout(2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
     
     % --- (1) Top: Instantaneous NEES ---

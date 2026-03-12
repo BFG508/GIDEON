@@ -40,8 +40,8 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     % 2. INITIAL COVARIANCE MATRIX
     % ====================================================================
 
-    % Attitude uncertainty: assume ±10° initial pointing error (1σ)
-    sigmaAtt0 = deg2rad(10); % [rad]
+    % Attitude uncertainty: assume ±1° initial pointing error (1σ)
+    sigmaAtt0 = deg2rad(1); % [rad]
     PAtt      = (sigmaAtt0^2) * eye(3);
     
     % Gyro bias uncertainty: use turn-on bias repeatability spec
@@ -76,8 +76,8 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     %    preventing covariance collapse and accommodating the transient
     %    bias coupling caused by the slew maneuver.
     
-    tuningFactorARW = 1e2;  % Keeps attitude NEES stable
-    tuningFactorRRW = 1e10; % Massive inflation to catch the bias spike
+    tuningFactorARW = 1e2; % Keeps attitude NEES stable
+    tuningFactorRRW = 2e8; % Massive inflation to catch the bias spike
     
     EKF.Q = zeros(6,6);
     EKF.Q(1:3, 1:3) = Q_base(1:3, 1:3) * tuningFactorARW;
@@ -92,7 +92,7 @@ function EKF = initializeEKF_Att(IMU, MAG, STR)
     % ====================================================================
 
     % Magnetometer noise
-    EKF.R_MAG = computeMAGNoise(MAG) + (MAG.hardIronLim)^2 * eye(3);
+    EKF.R_MAG = (computeMAGNoise(MAG) + (MAG.hardIronLim)^2 * eye(3)) * 1e3;
     fprintf(' Magnetometer noise (R):  %.2f nT (1σ per axis)\n', ...
             sqrt(EKF.R_MAG(1,1)));
     

@@ -1,17 +1,18 @@
-function EKF = predictEKF_Nav(EKF, forceMeas, q_ECI2B, dt)
+function EKF = predictEKF_Nav(EKF, forceMeas, q_ECI2B, dt, GNSS)
 %==========================================================================
 % predictEKF_Nav: Propagates the PV-EKF state and covariance through the 
-%                 prediction step using accelerometer measurements and 
-%                 orbital dynamics.
+%                 prediction step using accelerometer measurements, 
+%                 orbital dynamics, and Gauss-Markov noise models.
 %
 % Inputs:
 %    EKF       - PV-EKF structure with fields:
-%        .x    - State vector (9x1): [rECI; vECI; biasAccel]
-%        .P    - State covariance matrix (9x9)
-%        .Q    - Discrete process noise covariance matrix (9x9)
+%        .x    - State vector (15x1): [rECI; vECI; biasAccel; rGM; vGM]
+%        .P    - State covariance matrix (15x15)
+%        .Q    - Discrete process noise covariance matrix (15x15)
 %    forceMeas - Measured specific force from accelerometer [m/s²] (3x1)
 %    q_ECI2B   - Current attitude quaternion (ECI to Body) (4x1)
 %    dt        - Time step [s]
+%    GNSS      - GNSS parameter structure (contains tauPos, tauVel)
 %
 % Outputs:
 %    EKF       - Updated EKF structure propagated.
@@ -19,10 +20,11 @@ function EKF = predictEKF_Nav(EKF, forceMeas, q_ECI2B, dt)
 % Algorithm:
 %    1. State Propagation: Integrates position and velocity using RK4 with
 %       central gravity + J2 perturbation, plus the bias-corrected specific
-%       force rotated to the ECI frame.
+%       force rotated to the ECI frame. Propagates Gauss-Markov states
+%       using analytical exponential decay.
 %    2. Covariance Propagation: Evaluates the continuous-time Jacobian (F)
-%       including the gravity gradient tensor, computes the State Transition
-%       Matrix (Phi), and propagates P.
+%       including the gravity gradient tensor and GM time constants, 
+%       computes the State Transition Matrix (Phi), and propagates P.
 %==========================================================================
 
     % Constants
@@ -31,9 +33,11 @@ function EKF = predictEKF_Nav(EKF, forceMeas, q_ECI2B, dt)
     J2Earth = 1.08262668e-3;   % [-]
 
     % Extract current state
-    r  = EKF.x(1:3);
-    v  = EKF.x(4:6);
-    bA = EKF.x(7:9);
+    r   = EKF.x(1:3);
+    v   = EKF.x(4:6);
+    bA  = EKF.x(7:9);
+    rGM = EKF.x(10:12);
+    vGM = EKF.x(13:15);
     
     %% ====================================================================
     % 1. SPECIFIC FORCE COMPUTATION
@@ -88,12 +92,17 @@ function EKF = predictEKF_Nav(EKF, forceMeas, q_ECI2B, dt)
     % Bias is modeled as a random walk, so its deterministic derivative is 0
     % EKF.x(7:9) remains unchanged in the prediction step
     
+    % Gauss-Markov states propagate via analytical exponential decay
+    EKF.x(10:12) = rGM * exp(-dt / GNSS.tauPos);
+    EKF.x(13:15) = vGM * exp(-dt / GNSS.tauVel);
+    
     %% ====================================================================
     % 3. COVARIANCE PROPAGATION
     % =====================================================================
    
     % Discrete-time State Transition Matrix (STM) - 1st order Taylor expansion
-    Phi = computeSTM_Nav(r, q_ECI2B, dt);
+    % (Note the GNSS parameter added to the function call)
+    Phi = computeSTM_Nav(r, q_ECI2B, dt, GNSS);
     
     % Propagate Covariance (P = Phi * P * Phi' + Q)
     EKF.P = Phi * EKF.P * Phi' + EKF.Q;

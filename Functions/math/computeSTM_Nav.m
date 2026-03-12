@@ -1,4 +1,4 @@
-function Phi = computeSTM_Nav(rECI, q_ECI2B, dt)
+function Phi = computeSTM_Nav(rECI, q_ECI2B, dt, GNSS)
 %==========================================================================
 % computeSTM_Nav: Computes State Transition Matrix (STM) for PV-EKF error state
 %                 propagation using first-order discrete approximation.
@@ -7,9 +7,10 @@ function Phi = computeSTM_Nav(rECI, q_ECI2B, dt)
 %    rECI    - Position vector in ECI [m] (3x1)
 %    q_ECI2B - Attitude Quaternion (ECI -> Body) (4x1)
 %    dt      - Time step [s]
+%    GNSS    - GNSS parameter structure (contains tauPos, tauVel for GM states)
 %
 % Outputs:
-%    Phi     - Discrete State Transition Matrix (9x9)
+%    Phi     - Discrete State Transition Matrix (15x15)
 %==========================================================================
     
     % Constants
@@ -30,15 +31,23 @@ function Phi = computeSTM_Nav(rECI, q_ECI2B, dt)
     DCM_B2ECI = DCM_ECI2B'; 
 
     % --- 3. Continuous Jacobian Matrix (F) ---
-    % State: [r; v; ba]
-    %  d(rDot)/dr = 0,  d(rDot)/dv = I,  d(rDot)/dba = 0
-    %  d(vDot)/dr = G,  d(vDot)/dv = 0,  d(vDot)/dba = -DCM_B2ECI
-    % d(baDot)/dr = 0, d(baDot)/dv = 0, d(baDot)/dba = 0
-    F = [ O3,  I3,        O3;
-           G,  O3, -DCM_B2ECI;
-          O3,  O3,        O3];
+    % State: [r; v; ba; rGM; vGM]
+    %  d(rDot)/dr = 0,  d(rDot)/dv = I,  d(rDot)/dba = 0,          O3,          O3
+    %  d(vDot)/dr = G,  d(vDot)/dv = 0,  d(vDot)/dba = -DCM_B2ECI, O3,          O3
+    % d(baDot)/dr = 0, d(baDot)/dv = 0, d(baDot)/dba = 0,          O3,          O3
+    % d(rGMDot)/...                                            -1/tauPos*I3,    O3
+    % d(vGMDot)/...                                                O3,     -1/tauVel*I3
+    
+    F_rGM = -(1 / GNSS.tauPos) * I3;
+    F_vGM = -(1 / GNSS.tauVel) * I3;
+
+    F = [ O3,  I3,        O3,    O3,    O3;
+           G,  O3, -DCM_B2ECI,   O3,    O3;
+          O3,  O3,        O3,    O3,    O3;
+          O3,  O3,        O3, F_rGM,    O3;
+          O3,  O3,        O3,    O3, F_vGM];
       
     % --- 4. Discrete Approximation ---
     % Phi = I + F*dt (First order Taylor)
-    Phi = eye(9) + F * dt;
+    Phi = eye(15) + F * dt;
 end

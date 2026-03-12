@@ -1,4 +1,4 @@
-function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, PHist, imuMeas, saveFlag)
+function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, rGMEst, vGMEst, PHist, imuMeas, saveFlag)
 %==========================================================================
 % plotEKF_NavResults: Comprehensive PV-EKF performance analysis and 
 %                     visualization with translational errors, bias 
@@ -11,14 +11,16 @@ function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, PHist, imuMeas,
 %              .vECI       - True velocity in ECI                  [m/s], 3xN
 %   rEst     - Estimated position history                            [m], 3xN
 %   vEst     - Estimated velocity history                          [m/s], 3xN
-%   biasEst  - Estimated accelerometer bias history                [m/s²], 3xN
-%   PHist    - Covariance matrix history                                , 9x9xN
+%   biasEst  - Estimated accelerometer bias history               [m/s²], 3xN
+%   rGMEst   - Estimated GNSS GM position error history              [m], 3xN
+%   vGMEst   - Estimated GNSS GM velocity error history            [m/s], 3xN
+%   PHist    - Covariance matrix history                              , 15x15xN
 %   imuMeas  - IMU measurements structure (contains .accel.biasDyn)
 %   saveFlag - (Optional) Boolean. If true, saves figures to 'Figures/EKF'.
 %              Default: false
 %
 % OUTPUTS:
-%   fig      - Array of figure handles for the generated plots (7x1)
+%   fig      - Array of figure handles for the generated plots (8x1)
 %
 % PLOTS GENERATED:
 %   1) Position error (x, y, z, Norm) with ±3σ bounds
@@ -28,15 +30,16 @@ function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, PHist, imuMeas,
 %   5) NEES consistency check (chi-squared bounds)
 %   6) 3D Orbital Trajectory: true vs measured
 %   7) Error statistics summary (bar charts)
+%   8) GNSS Gauss-Markov error estimates (Position & Velocity) with 3σ bounds
 %==========================================================================
 
     % Handle optional saveFlag
-    if nargin < 7
+    if nargin < 10
         saveFlag = false;
     end
     
     nFig = 0;
-    fig  = gobjects(7, 1);
+    fig  = gobjects(8, 1);
     N    = length(t);
     tMin = t / 60;
     
@@ -58,14 +61,18 @@ function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, PHist, imuMeas,
     biasErr  = (biasEst - imuMeas.accel.biasDyn) * 1000;
     
     % Extract uncertainty (1σ) from covariance
-    sigmaPos  = zeros(3, N);
-    sigmaVel  = zeros(3, N);
-    sigmaBias = zeros(3, N);
+    sigmaPos   = zeros(3, N);
+    sigmaVel   = zeros(3, N);
+    sigmaBias  = zeros(3, N);
+    sigmaPosGM = zeros(3, N);
+    sigmaVelGM = zeros(3, N);
     
     for k = 1:N
-        sigmaPos(:,k)  = sqrt(diag(PHist(1:3, 1:3, k)));
-        sigmaVel(:,k)  = sqrt(diag(PHist(4:6, 4:6, k)));
-        sigmaBias(:,k) = sqrt(diag(PHist(7:9, 7:9, k))) * 1000;
+        sigmaPos(:,k)   = sqrt(diag(PHist(1:3, 1:3, k)));
+        sigmaVel(:,k)   = sqrt(diag(PHist(4:6, 4:6, k)));
+        sigmaBias(:,k)  = sqrt(diag(PHist(7:9, 7:9, k))) * 1000;
+        sigmaPosGM(:,k) = sqrt(diag(PHist(10:12, 10:12, k)));
+        sigmaVelGM(:,k) = sqrt(diag(PHist(13:15, 13:15, k)));
     end
     
     % Steady state index for dynamic Y-axis scaling (ignore first 2%)
@@ -231,40 +238,41 @@ function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, PHist, imuMeas,
     % --- (1) Top: Position Uncertainty ---
     ax1 = nexttile;
     hold(ax1, 'on');
-    plot(ax1, tMin, 3*sigmaPos(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'X');
-    plot(ax1, tMin, 3*sigmaPos(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Y');
-    plot(ax1, tMin, 3*sigmaPos(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Z');
+    plot(ax1, tMin, 3*sigmaPos(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'x');
+    plot(ax1, tMin, 3*sigmaPos(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'y');
+    plot(ax1, tMin, 3*sigmaPos(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'z');
     ylabel(ax1, '3σ Position Uncertainty [m]', 'FontSize', 10, 'FontWeight', 'bold');
     title(ax1, 'Position Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
     set(ax1, 'FontSize', 10); grid(ax1, 'on'); xlim(ax1, [tMin(1), tMin(end)]);
     ylim(ax1, [0, max(max(3*sigmaPos(:, idxConverged))) * 1.5]);
-    legend(ax1, 'Location', 'northeast', 'FontSize', 10);
     
     % --- (2) Middle: Velocity Uncertainty ---
     ax2 = nexttile;
     hold(ax2, 'on');
-    plot(ax2, tMin, 3*sigmaVel(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'X');
-    plot(ax2, tMin, 3*sigmaVel(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Y');
-    plot(ax2, tMin, 3*sigmaVel(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Z');
+    plot(ax2, tMin, 3*sigmaVel(1,:), 'r-', 'LineWidth', 1.5);
+    plot(ax2, tMin, 3*sigmaVel(2,:), 'g-', 'LineWidth', 1.5);
+    plot(ax2, tMin, 3*sigmaVel(3,:), 'b-', 'LineWidth', 1.5);
     ylabel(ax2, '3σ Velocity Uncertainty [m/s]', 'FontSize', 10, 'FontWeight', 'bold');
     title(ax2, 'Velocity Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
     set(ax2, 'FontSize', 10); grid(ax2, 'on'); xlim(ax2, [tMin(1), tMin(end)]);
     ylim(ax2, [0, max(max(3*sigmaVel(:, idxConverged))) * 1.5]);
-    legend(ax2, 'Location', 'northeast', 'FontSize', 10);
     
     % --- (3) Bottom: Bias Uncertainty ---
     ax3 = nexttile;
     hold(ax3, 'on');
-    plot(ax3, tMin, 3*sigmaBias(1,:), 'r-', 'LineWidth', 1.5, 'DisplayName', 'X');
-    plot(ax3, tMin, 3*sigmaBias(2,:), 'g-', 'LineWidth', 1.5, 'DisplayName', 'Y');
-    plot(ax3, tMin, 3*sigmaBias(3,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Z');
+    plot(ax3, tMin, 3*sigmaBias(1,:), 'r-', 'LineWidth', 1.5);
+    plot(ax3, tMin, 3*sigmaBias(2,:), 'g-', 'LineWidth', 1.5);
+    plot(ax3, tMin, 3*sigmaBias(3,:), 'b-', 'LineWidth', 1.5);
     ylabel(ax3, '3σ Accel. Bias Uncertainty [mm/s^2]', 'FontSize', 10, 'FontWeight', 'bold');
     title(ax3, 'Accelometers Bias Uncertainty Evolution', 'FontSize', 12, 'FontWeight', 'bold');
     set(ax3, 'FontSize', 10); grid(ax3, 'on'); xlim(ax3, [tMin(1), tMin(end)]);
     ylim(ax3, [0, max(max(3*sigmaBias(:, idxConverged))) * 1.5]);
-    legend(ax3, 'Location', 'northeast', 'FontSize', 10);
     
     xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % --- Shared Legend ---
+    lgd = legend(ax1, 'Orientation', 'horizontal', 'FontSize', 11);
+    lgd.Layout.Tile = 'north';
     
     if saveFlag
         saveFigure(fig(nFig), saveDir, 'EKF_Nav_fig4_uncertainty_evolution');
@@ -514,4 +522,54 @@ function fig = plotEKF_NavResults(t, truth, rEst, vEst, biasEst, PHist, imuMeas,
         saveFigure(fig(nFig), saveDir, 'EKF_Nav_fig7_error_statistics');
     end
    
+    %% ------------------------------------------------------------------------
+    % 8. GNSS GAUSS-MARKOV ERROR ESTIMATES
+    % -------------------------------------------------------------------------
+    nFig = nFig + 1;
+    fig(nFig) = figure('Name', 'PV-EKF - Gauss-Markov Estimates', ...
+                       'Color', 'w', 'NumberTitle', 'off', ...
+                       'Position', [600, 200, 1000, 750]);
+                       
+    tLayout = tiledlayout(2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+    
+    % --- (1) Top: Position GM Error ---
+    ax1 = nexttile;
+    hold(ax1, 'on');
+    plot(ax1, tMin, rGMEst(1,:), 'b-', 'LineWidth', 1.2, 'DisplayName', 'x');
+    plot(ax1, tMin, rGMEst(2,:), 'g-', 'LineWidth', 1.2, 'DisplayName', 'y');
+    plot(ax1, tMin, rGMEst(3,:), 'k-', 'LineWidth', 1.2, 'DisplayName', 'z');
+    
+    % Plot 3-sigma bounds for X just to show the envelope without cluttering
+    plot(ax1, tMin,  3*sigmaPosGM(1,:), 'r--', 'LineWidth', 1.0, 'DisplayName', '\pm3σ');
+    plot(ax1, tMin, -3*sigmaPosGM(1,:), 'r--', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+    
+    ylabel(ax1, '\delta r_{GM} [m]', 'FontSize', 10, 'FontWeight', 'bold');
+    title(ax1, 'GNSS Position Correlated Error Estimate', 'FontSize', 12, 'FontWeight', 'bold');
+    set(ax1, 'FontSize', 10); grid(ax1, 'on'); xlim(ax1, [tMin(1), tMin(end)]);
+    
+    % --- (2) Bottom: Velocity GM Error ---
+    ax2 = nexttile;
+    hold(ax2, 'on');
+    plot(ax2, tMin, vGMEst(1,:), 'b-', 'LineWidth', 1.2, 'DisplayName', 'x Est');
+    plot(ax2, tMin, vGMEst(2,:), 'g-', 'LineWidth', 1.2, 'DisplayName', 'y Est');
+    plot(ax2, tMin, vGMEst(3,:), 'k-', 'LineWidth', 1.2, 'DisplayName', 'z Est');
+    
+    plot(ax2, tMin,  3*sigmaVelGM(1,:), 'r--', 'LineWidth', 1.0, 'DisplayName', '\pm3σ (x)');
+    plot(ax2, tMin, -3*sigmaVelGM(1,:), 'r--', 'LineWidth', 1.0, 'HandleVisibility', 'off');
+    
+    ylabel(ax2, '\delta v_{GM} [m/s]', 'FontSize', 10, 'FontWeight', 'bold');
+    title(ax2, 'GNSS Velocity Correlated Error Estimate', 'FontSize', 12, 'FontWeight', 'bold');
+    set(ax2, 'FontSize', 10); grid(ax2, 'on'); xlim(ax2, [tMin(1), tMin(end)]);
+    
+    xlabel(tLayout, 'Time [min]', 'FontSize', 10, 'FontWeight', 'bold');
+    
+    % --- Shared Legend ---
+    % Attach the legend to the first axes, but position it globally at the top
+    lgd = legend(ax1, 'Orientation', 'horizontal', 'FontSize', 11);
+    lgd.Layout.Tile = 'north';
+    
+    if saveFlag
+        saveFigure(fig(nFig), saveDir, 'EKF_Nav_fig8_GM_estimates');
+    end
+    
 end

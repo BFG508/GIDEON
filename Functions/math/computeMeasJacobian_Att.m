@@ -35,6 +35,6 @@ function H = computeMeasJacobian_Att(vPred)
              -vPred(2),  vPred(1),        0];
     
     % --- 2. Assemble Jacobian ---
-    H = [-vSkew, zeros(3,3)];
+    H = [vSkew, zeros(3,3)];
 
 end
